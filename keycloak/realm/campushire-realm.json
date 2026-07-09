@@ -1,0 +1,73 @@
+{
+  "realm": "campushire",
+  "enabled": true,
+  "displayName": "CampusHire",
+  "verifyEmail": true,
+  "registrationEmailAsUsername": true,
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "clients": [
+    {
+      "clientId": "campushire-web",
+      "name": "CampusHire CRM",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles"
+      ],
+      "redirectUris": [
+        "http://localhost:8080/login/oauth2/code/keycloak",
+        "http://localhost:3000/*",
+        "http://localhost:4200/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:3000",
+        "http://localhost:4200",
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "SUPER_ADMIN"
+      },
+      {
+        "name": "INSTITUTE_ADMIN"
+      },
+      {
+        "name": "TPO"
+      },
+      {
+        "name": "TNP_COORDINATOR"
+      },
+      {
+        "name": "FACULTY"
+      },
+      {
+        "name": "STUDENT"
+      },
+      {
+        "name": "RECRUITER"
+      }
+    ]
+  }
+}

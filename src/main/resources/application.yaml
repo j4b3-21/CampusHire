@@ -1,3 +1,73 @@
 spring:
   application:
     name: campushire
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:8766/campushire}
+    username: ${DB_USERNAME:campushire}
+    password: ${DB_PASSWORD:campushire123}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  flyway:
+    enabled: true
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  security:
+    oauth2:
+
+      client:
+        provider:
+          keycloak:
+            issuer-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8765}/realms/${KEYCLOAK_REALM:campushire}
+
+        registration:
+          keycloak:
+            provider: keycloak
+            client-id: ${KEYCLOAK_CLIENT_ID}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+
+            scope:
+              - openid
+              - profile
+              - email
+
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8765}/realms/${KEYCLOAK_REALM:campushire}
+
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  auth:
+
+    cors:
+      allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+    security:
+      post-login-redirect-uri: ${APP_POST_LOGIN_REDIRECT_URI:http://localhost:5173/}
+      post-logout-redirect-uri: ${APP_POST_LOGOUT_REDIRECT_URI:http://localhost:5173/}
+
+      keycloak-logout-uri: ${KEYCLOAK_SERVER_URL:http://localhost:8765}/realms/${KEYCLOAK_REALM:campushire}/protocol/openid-connect/logout

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    extends:
+      file: ./database/docker-compose.yml
+      service: postgres
+
+  keycloak-postgres:
+    extends:
+      file: ./keycloak/docker-compose.yml
+      service: keycloak-postgres
+
+  keycloak:
+    extends:
+      file: ./keycloak/docker-compose.yml
+      service: keycloak
+
+volumes:
+  campushire_data:
+  keycloak_data:
