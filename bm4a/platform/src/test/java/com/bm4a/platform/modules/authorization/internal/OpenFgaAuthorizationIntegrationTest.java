@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +19,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.bm4a.platform.modules.authorization.AuthorizationService;
 import com.bm4a.platform.modules.authorization.AuthorizationUnavailableException;
+import com.bm4a.platform.modules.authorization.ModulePermission;
+import com.bm4a.platform.modules.authorization.ModuleRelation;
 import com.bm4a.platform.modules.authorization.OrganizationRelation;
 import com.bm4a.platform.modules.authorization.Permission;
 import com.bm4a.platform.modules.authorization.RelationshipTuple;
@@ -109,6 +114,53 @@ class OpenFgaAuthorizationIntegrationTest {
         publish(RelationshipTuplesChanged.replace(admin, member));
         assertThat(authorization.isAllowed(user, Permission.METADATA_MANAGE, org)).isFalse();
         assertThat(authorization.isAllowed(user, Permission.RECORDS_READ, org)).isTrue();
+    }
+
+    @Test
+    void modulePermissionsComeFromMemberUsersetsRoleAssigneesAndOrganizationAdmins() {
+        UUID module = UUID.randomUUID();
+        UUID role = UUID.randomUUID();
+        UUID member = UUID.randomUUID();
+        UUID assignee = UUID.randomUUID();
+        UUID admin = UUID.randomUUID();
+        publish(new RelationshipTuplesChanged(List.of(
+                RelationshipTuple.organization(member, OrganizationRelation.MEMBER, org),
+                RelationshipTuple.organization(assignee, OrganizationRelation.MEMBER, org),
+                RelationshipTuple.organization(admin, OrganizationRelation.ADMIN, org),
+                RelationshipTuple.moduleOrganization(module, org),
+                RelationshipTuple.roleOrganization(role, org),
+                RelationshipTuple.roleAssignee(assignee, role),
+                RelationshipTuple.moduleRole(ModuleRelation.READER, module, role)), List.of()));
+
+        assertThat(authorization.isAllowed(member, ModulePermission.READ, module)).isFalse();
+        assertThat(authorization.isAllowed(assignee, ModulePermission.READ, module)).isTrue();
+        assertThat(authorization.isAllowed(assignee, ModulePermission.WRITE, module)).isFalse();
+        assertThat(authorization.isAllowed(admin, ModulePermission.WRITE, module)).isTrue();
+
+        publish(new RelationshipTuplesChanged(List.of(
+                RelationshipTuple.moduleMembers(ModuleRelation.WRITER, module, org)), List.of()));
+        assertThat(authorization.isAllowed(member, ModulePermission.READ, module)).isTrue();
+        assertThat(authorization.isAllowed(member, ModulePermission.WRITE, module)).isTrue();
+        assertThat(authorization.isAllowed(UUID.randomUUID(), ModulePermission.READ, module)).isFalse();
+
+        publish(RelationshipTuplesChanged.delete(RelationshipTuple.roleAssignee(assignee, role)));
+        publish(RelationshipTuplesChanged.delete(RelationshipTuple.moduleMembers(ModuleRelation.WRITER, module, org)));
+        assertThat(authorization.isAllowed(assignee, ModulePermission.READ, module)).isFalse();
+        assertThat(authorization.isAllowed(member, ModulePermission.READ, module)).isFalse();
+    }
+
+    @Test
+    void largeTupleChangesAreWrittenInChunks() {
+        UUID module = UUID.randomUUID();
+        List<UUID> users = IntStream.range(0, 130).mapToObj(i -> UUID.randomUUID()).toList();
+        UUID role = UUID.randomUUID();
+        List<RelationshipTuple> writes = new ArrayList<>(users.stream()
+                .map(user -> RelationshipTuple.roleAssignee(user, role)).toList());
+        writes.add(RelationshipTuple.moduleRole(ModuleRelation.WRITER, module, role));
+        publish(new RelationshipTuplesChanged(writes, List.of()));
+
+        assertThat(authorization.isAllowed(users.getFirst(), ModulePermission.WRITE, module)).isTrue();
+        assertThat(authorization.isAllowed(users.getLast(), ModulePermission.WRITE, module)).isTrue();
     }
 
     @Test

@@ -14,6 +14,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.records.RecordView;
 import com.bm4a.platform.modules.shared.persistence.JsonColumns;
 
@@ -36,15 +37,15 @@ class RecordRepository {
         this.mapper = (rs, n) -> new RecordView(uuid(rs, "id"), uuid(rs, "organization_id"), uuid(rs, "module_id"),
                 json.readObject(rs.getString("data")), rs.getLong("version"), rs.getLong("definition_version"),
                 instant(rs, "created_at"), uuid(rs, "created_by"), instant(rs, "updated_at"), uuid(rs, "updated_by"),
-                instant(rs, "deleted_at"), uuid(rs, "deleted_by"));
+                instant(rs, "deleted_at"), uuid(rs, "deleted_by"), uuid(rs, "owner_user_id"));
     }
 
     void insert(RecordView r) {
         jdbc.sql("""
                 INSERT INTO record (id, organization_id, module_id, data, version, definition_version, created_at,
-                                    created_by, updated_at, updated_by)
+                                    created_by, updated_at, updated_by, owner_user_id)
                 VALUES (:id, :org, :module, CAST(:data AS jsonb), :version, :definitionVersion, :createdAt, :createdBy,
-                        :updatedAt, :updatedBy)
+                        :updatedAt, :updatedBy, :owner)
                 """)
                 .param("id", r.id())
                 .param("org", r.organizationId())
@@ -56,14 +57,17 @@ class RecordRepository {
                 .param("createdBy", r.createdBy())
                 .param("updatedAt", ts(r.updatedAt()))
                 .param("updatedBy", r.updatedBy())
+                .param("owner", r.ownerUserId())
                 .update();
     }
 
+    /** Writes data, version and lifecycle columns, and the owner. */
     void update(RecordView r) {
         jdbc.sql("""
                 UPDATE record
                    SET data = CAST(:data AS jsonb), version = :version, definition_version = :definitionVersion,
-                       updated_at = :updatedAt, updated_by = :updatedBy, deleted_at = :deletedAt, deleted_by = :deletedBy
+                       updated_at = :updatedAt, updated_by = :updatedBy, deleted_at = :deletedAt, deleted_by = :deletedBy,
+                       owner_user_id = :owner
                  WHERE id = :id AND organization_id = :org
                 """)
                 .param("id", r.id())
@@ -75,6 +79,7 @@ class RecordRepository {
                 .param("updatedBy", r.updatedBy())
                 .param("deletedAt", ts(r.deletedAt()))
                 .param("deletedBy", r.deletedBy())
+                .param("owner", r.ownerUserId())
                 .update();
     }
 
@@ -84,6 +89,34 @@ class RecordRepository {
                 .param("id", id)
                 .param("org", organizationId)
                 .param("module", moduleId)
+                .query(mapper)
+                .optional();
+    }
+
+    /** Like {@link #find}, additionally restricted by a record scope predicate over alias {@code r}. */
+    Optional<RecordView> find(UUID organizationId, UUID moduleId, UUID id, RecordScopes.Predicate scope,
+            boolean forUpdate) {
+        return jdbc.sql("SELECT r.* FROM record r WHERE r.id = :id AND r.organization_id = :org AND r.module_id = :module"
+                        + " AND " + scope.sql() + (forUpdate ? " FOR UPDATE" : ""))
+                .params(scope.params())
+                .param("id", id)
+                .param("org", organizationId)
+                .param("module", moduleId)
+                .query(mapper)
+                .optional();
+    }
+
+    /** The oldest active record of the module whose {@code data} contains {@code containment} (JSON). */
+    Optional<RecordView> findFirstActiveContaining(UUID organizationId, UUID moduleId, String containment) {
+        return jdbc.sql("""
+                SELECT * FROM record
+                 WHERE organization_id = :org AND module_id = :module AND deleted_at IS NULL
+                   AND data @> CAST(:containment AS jsonb)
+                 ORDER BY created_at, id LIMIT 1
+                """)
+                .param("org", organizationId)
+                .param("module", moduleId)
+                .param("containment", containment)
                 .query(mapper)
                 .optional();
     }

@@ -9,9 +9,10 @@ import java.util.UUID;
  *
  * @param organizationId owning tenant, or {@code null} for a platform-global module
  * @param version definition version; increments on any module, field or layout change
+ * @param accessMode who may use the module besides organization admins (ADR-004)
  */
 public record ModuleSchema(UUID id, UUID organizationId, String apiKey, String labelSingular, String labelPlural,
-        boolean active, long version, List<FieldSchema> fields) {
+        boolean active, long version, ModuleAccessMode accessMode, List<FieldSchema> fields) {
 
     public ModuleSchema {
         fields = List.copyOf(fields);

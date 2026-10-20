@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,13 +14,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bm4a.platform.modules.audit.AuditEntry;
 import com.bm4a.platform.modules.audit.AuditLog;
+import com.bm4a.platform.modules.authorization.ModuleRelation;
+import com.bm4a.platform.modules.authorization.RelationshipTuple;
+import com.bm4a.platform.modules.authorization.RelationshipTuplesChanged;
 import com.bm4a.platform.modules.metadata.FieldStatus;
+import com.bm4a.platform.modules.metadata.ModuleAccessMode;
 import com.bm4a.platform.modules.metadata.internal.FieldDefinitionValidator.FieldDraft;
 import com.bm4a.platform.modules.metadata.internal.VersionRow;
 import com.bm4a.platform.modules.shared.error.ApiException;
@@ -47,15 +53,18 @@ public class MetadataService {
     private final FieldDefinitionValidator fieldValidator;
     private final LayoutValidator layoutValidator;
     private final AuditLog audit;
+    private final ApplicationEventPublisher events;
     private final JsonColumns json;
     private final Clock clock;
 
     MetadataService(MetadataRepository repository, FieldDefinitionValidator fieldValidator,
-            LayoutValidator layoutValidator, AuditLog audit, JsonColumns json, Clock clock) {
+            LayoutValidator layoutValidator, AuditLog audit, ApplicationEventPublisher events, JsonColumns json,
+            Clock clock) {
         this.repository = repository;
         this.fieldValidator = fieldValidator;
         this.layoutValidator = layoutValidator;
         this.audit = audit;
+        this.events = events;
         this.json = json;
         this.clock = clock;
     }
@@ -115,6 +124,7 @@ public class MetadataService {
         }
         drafts.forEach(draft -> repository.insertField(newField(module.id(), draft, actor, now)));
         snapshot(module, actor, now);
+        syncTuples(Set.of(), module);
         audit.record(AuditEntry.of(scope.organizationId(), actor, "metadata.module.created", "module", module.id())
                 .with("apiKey", module.apiKey()).with("fields", List.copyOf(keys)));
         return view(module);
@@ -162,6 +172,8 @@ public class MetadataService {
         diff(changes, "description", current.description(), description);
         if (!Objects.equals(current.settings(), settings)) {
             changes.put("settings", "changed");
+            diff(changes, ModuleAccessMode.SETTING, ModuleAccessMode.of(current.settings()).orElse(null),
+                    ModuleAccessMode.of(settings).orElse(null));
         }
         if (changes.isEmpty()) {
             return view(current);
@@ -169,6 +181,7 @@ public class MetadataService {
         ModuleRow updated = bump(new ModuleRow(current.id(), current.organizationId(), current.apiKey(), singular,
                 plural, description, current.status(), settings, current.layout(), current.version(),
                 current.createdAt(), current.createdBy(), current.updatedAt(), current.updatedBy()), actor);
+        syncTuples(moduleTuples(current), updated);
         audit.record(AuditEntry.of(scope.organizationId(), actor, "metadata.module.updated", "module", current.id())
                 .with("apiKey", current.apiKey()).with("changes", changes));
         return view(updated);
@@ -378,7 +391,36 @@ public class MetadataService {
         if (json.write(object).length() > MAX_SETTINGS_BYTES) {
             violations.add(new FieldViolation("settings", "size", "settings must not exceed 16 KiB"));
         }
+        if (ModuleAccessMode.of(object).isEmpty()) {
+            violations.add(new FieldViolation("settings." + ModuleAccessMode.SETTING, "invalid",
+                    "accessMode must be MEMBERS or ROLES"));
+        }
         return object;
+    }
+
+    /**
+     * OpenFGA tuples derived from a tenant module (ADR-004): its organization, plus the organization's members as
+     * readers and writers in {@code MEMBERS} mode. Platform-global modules have no module tuples; access to them is
+     * decided per tenant by the access module.
+     */
+    static Set<RelationshipTuple> moduleTuples(ModuleRow module) {
+        if (module.global()) {
+            return Set.of();
+        }
+        Set<RelationshipTuple> tuples = new LinkedHashSet<>();
+        tuples.add(RelationshipTuple.moduleOrganization(module.id(), module.organizationId()));
+        if (ModuleAccessMode.of(module.settings()).orElse(ModuleAccessMode.ROLES) == ModuleAccessMode.MEMBERS) {
+            tuples.add(RelationshipTuple.moduleMembers(ModuleRelation.READER, module.id(), module.organizationId()));
+            tuples.add(RelationshipTuple.moduleMembers(ModuleRelation.WRITER, module.id(), module.organizationId()));
+        }
+        return tuples;
+    }
+
+    private void syncTuples(Set<RelationshipTuple> before, ModuleRow after) {
+        RelationshipTuplesChanged change = RelationshipTuplesChanged.diff(before, moduleTuples(after));
+        if (change.hasChanges()) {
+            events.publishEvent(change);
+        }
     }
 
     private static void validateLabels(String singular, String plural, String description,

@@ -47,10 +47,12 @@ class MeController {
     record ProfileResponse(String locale, String timeZone, JsonNode preferences, Instant updatedAt) {
     }
 
-    record MeResponse(UUID id, String email, String displayName, boolean platformAdmin, ProfileResponse profile) {
+    record MeResponse(UUID id, String email, String displayName, boolean platformAdmin, boolean emailVerified,
+            ProfileResponse profile) {
 
         static MeResponse of(CurrentUser user, ProfileRow profile) {
             return new MeResponse(user.id(), user.email(), user.displayName(), user.platformAdmin(),
+                    user.emailVerified(),
                     new ProfileResponse(profile.locale(), profile.timeZone(), profile.preferences(),
                             profile.updatedAt()));
         }

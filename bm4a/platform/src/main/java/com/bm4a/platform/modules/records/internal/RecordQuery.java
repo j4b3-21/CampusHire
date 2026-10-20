@@ -11,10 +11,12 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.bm4a.platform.modules.access.FieldPolicy;
 import com.bm4a.platform.modules.metadata.FieldSchema;
 import com.bm4a.platform.modules.metadata.FieldType;
 import com.bm4a.platform.modules.metadata.FieldValues;
 import com.bm4a.platform.modules.metadata.ModuleSchema;
+import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.shared.error.ApiException;
 
 import tools.jackson.databind.JsonNode;
@@ -52,19 +54,27 @@ final class RecordQuery {
     private final List<String> conditions = new ArrayList<>();
     private final Map<String, Object> params = new HashMap<>();
     private final List<String> orderBy = new ArrayList<>();
+    private FieldPolicy policy = FieldPolicy.unrestricted();
     private int counter;
 
     private RecordQuery() {
     }
 
+    /**
+     * @param policy hidden fields can be neither filtered, sorted nor searched (they would leak through results)
+     * @param scope record scope predicate over alias {@code r}; its parameter names must not start with {@code p}
+     */
     static RecordQuery build(UUID organizationId, ModuleSchema module, Map<String, List<String>> parameters,
-            String sort, String search, boolean deleted) {
+            String sort, String search, boolean deleted, FieldPolicy policy, RecordScopes.Predicate scope) {
         RecordQuery query = new RecordQuery();
+        query.policy = policy;
         query.conditions.add("r.organization_id = :org");
         query.conditions.add("r.module_id = :module");
         query.conditions.add(deleted ? "r.deleted_at IS NOT NULL" : "r.deleted_at IS NULL");
+        query.conditions.add(scope.sql());
         query.params.put("org", organizationId);
         query.params.put("module", module.id());
+        query.params.putAll(scope.params());
 
         int filters = 0;
         for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
@@ -79,7 +89,7 @@ final class RecordQuery {
                 throw ApiException.badRequest("invalid_filter", "At most " + MAX_FILTERS + " filters");
             }
             FieldSchema field = module.field(matcher.group(1))
-                    .filter(f -> f.visible() && f.filterable())
+                    .filter(f -> f.visible() && f.filterable() && !policy.hidden(f.apiKey()))
                     .orElseThrow(() -> ApiException.badRequest("invalid_filter",
                             "Field '" + matcher.group(1) + "' is not filterable"));
             Op op = parseOp(matcher.group(2));
@@ -159,7 +169,8 @@ final class RecordQuery {
         if (search.length() > 200) {
             throw ApiException.badRequest("invalid_search", "q must be at most 200 characters");
         }
-        List<FieldSchema> searchable = module.fields().stream().filter(f -> f.visible() && f.searchable()).toList();
+        List<FieldSchema> searchable = module.fields().stream()
+                .filter(f -> f.visible() && f.searchable() && !policy.hidden(f.apiKey())).toList();
         if (searchable.isEmpty()) {
             throw ApiException.badRequest("search_not_supported", "This module has no searchable fields");
         }
@@ -187,7 +198,8 @@ final class RecordQuery {
                     case "updated_at" -> orderBy.add("r.updated_at" + direction);
                     default -> {
                         String fieldKey = name;
-                        FieldSchema field = module.field(fieldKey).filter(f -> f.visible() && f.sortable())
+                        FieldSchema field = module.field(fieldKey)
+                                .filter(f -> f.visible() && f.sortable() && !policy.hidden(f.apiKey()))
                                 .orElseThrow(() -> ApiException.badRequest("invalid_sort",
                                         "Field '" + fieldKey + "' is not sortable"));
                         orderBy.add(typedExpression(field, param(field.apiKey())) + direction + " NULLS LAST");

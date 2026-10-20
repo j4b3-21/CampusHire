@@ -13,10 +13,14 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.relationships.internal.RelationshipRow.Cardinality;
 import com.bm4a.platform.modules.relationships.internal.RelationshipRow.OnDelete;
 
-/** Every statement is scoped by {@code organization_id}. */
+/**
+ * Every statement is scoped by {@code organization_id}. Related-record listings join the record engine's
+ * {@code record} table (read only) so that record scopes and soft deletion apply inside the paged query.
+ */
 @Repository
 class RelationshipRepository {
 
@@ -140,12 +144,19 @@ class RelationshipRepository {
                 .update();
     }
 
-    /** Links of one record within one relationship, from the source ({@code outgoing}) or target side. */
-    List<LinkRow> links(UUID organizationId, UUID relationshipId, UUID recordId, boolean outgoing, long offset,
-            int limit) {
-        return jdbc.sql("SELECT * FROM record_link WHERE organization_id = :org AND relationship_id = :rel AND "
-                        + (outgoing ? "source_record_id" : "target_record_id")
-                        + " = :record ORDER BY created_at, id LIMIT :limit OFFSET :offset")
+    /**
+     * Links of one record within one relationship, from the source ({@code outgoing}) or target side, whose other end is
+     * an active record within {@code scope} (a predicate over the {@code record} alias {@code r}).
+     */
+    List<LinkRow> links(UUID organizationId, UUID relationshipId, UUID recordId, boolean outgoing,
+            RecordScopes.Predicate scope, long offset, int limit) {
+        return jdbc.sql("SELECT l.* FROM record_link l JOIN record r ON r.organization_id = l.organization_id AND r.id = "
+                        + (outgoing ? "l.target_record_id" : "l.source_record_id")
+                        + " WHERE l.organization_id = :org AND l.relationship_id = :rel AND "
+                        + (outgoing ? "l.source_record_id" : "l.target_record_id")
+                        + " = :record AND r.deleted_at IS NULL AND " + scope.sql()
+                        + " ORDER BY l.created_at, l.id LIMIT :limit OFFSET :offset")
+                .params(scope.params())
                 .param("org", organizationId)
                 .param("rel", relationshipId)
                 .param("record", recordId)
@@ -155,9 +166,14 @@ class RelationshipRepository {
                 .list();
     }
 
-    long countLinks(UUID organizationId, UUID relationshipId, UUID recordId, boolean outgoing) {
-        return jdbc.sql("SELECT count(*) FROM record_link WHERE organization_id = :org AND relationship_id = :rel AND "
-                        + (outgoing ? "source_record_id" : "target_record_id") + " = :record")
+    long countLinks(UUID organizationId, UUID relationshipId, UUID recordId, boolean outgoing,
+            RecordScopes.Predicate scope) {
+        return jdbc.sql("SELECT count(*) FROM record_link l JOIN record r ON r.organization_id = l.organization_id"
+                        + " AND r.id = " + (outgoing ? "l.target_record_id" : "l.source_record_id")
+                        + " WHERE l.organization_id = :org AND l.relationship_id = :rel AND "
+                        + (outgoing ? "l.source_record_id" : "l.target_record_id")
+                        + " = :record AND r.deleted_at IS NULL AND " + scope.sql())
+                .params(scope.params())
                 .param("org", organizationId)
                 .param("rel", relationshipId)
                 .param("record", recordId)

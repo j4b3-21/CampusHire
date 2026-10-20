@@ -145,6 +145,19 @@ class MetadataRepository {
                 .list();
     }
 
+    /** Tenant modules of every organization, in stable pages (maintenance only, see {@link ModuleTupleReconciler}). */
+    List<ModuleRow> listTenantModules(UUID afterId, int limit) {
+        return jdbc.sql("""
+                SELECT m.* FROM module_definition m
+                 WHERE m.organization_id IS NOT NULL AND (CAST(:after AS uuid) IS NULL OR m.id > :after)
+                 ORDER BY m.id LIMIT :limit
+                """)
+                .param("after", afterId)
+                .param("limit", limit)
+                .query(moduleMapper)
+                .list();
+    }
+
     long countOwned(MetadataScope scope) {
         return jdbc.sql(scope.isGlobal()
                         ? "SELECT count(*) FROM module_definition WHERE organization_id IS NULL"

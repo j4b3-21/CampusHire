@@ -28,8 +28,9 @@ class JwtAuthenticatedIdentity implements AuthenticatedIdentity {
         String displayName = firstNonBlank(jwt.getClaimAsString("name"), jwt.getClaimAsString("preferred_username"));
         boolean platformAdmin = token.getAuthorities().stream()
                 .anyMatch(authority -> ("ROLE_" + properties.platformAdminRole()).equals(authority.getAuthority()));
+        boolean emailVerified = Boolean.TRUE.equals(jwt.getClaimAsBoolean("email_verified"));
         return Optional.of(new IdentityClaims(jwt.getClaimAsString("iss"), jwt.getSubject(),
-                jwt.getClaimAsString("email"), displayName, platformAdmin));
+                jwt.getClaimAsString("email"), displayName, platformAdmin, emailVerified));
     }
 
     private static String firstNonBlank(String first, String second) {

@@ -13,13 +13,19 @@ import java.util.stream.Collectors;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.bm4a.platform.modules.access.FieldPolicy;
+import com.bm4a.platform.modules.access.ModuleAccess;
+import com.bm4a.platform.modules.access.ModuleGrant;
+import com.bm4a.platform.modules.access.RecordAction;
 import com.bm4a.platform.modules.audit.AuditEntry;
 import com.bm4a.platform.modules.audit.AuditLog;
 import com.bm4a.platform.modules.metadata.ModuleSchema;
 import com.bm4a.platform.modules.metadata.ModuleSchemas;
 import com.bm4a.platform.modules.records.RecordDeletionGuard;
 import com.bm4a.platform.modules.records.RecordReader;
+import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.records.RecordView;
 import com.bm4a.platform.modules.relationships.internal.RelationshipRow.Cardinality;
 import com.bm4a.platform.modules.relationships.internal.RelationshipRow.OnDelete;
@@ -32,7 +38,8 @@ import com.bm4a.platform.modules.tenancy.TenantContext;
 
 /**
  * Relationship definitions and links. Both ends of a link must be active records of the relationship's modules in the
- * caller's tenant; cardinality is enforced by unique indexes. Also the {@link RecordDeletionGuard} applying each
+ * caller's tenant; cardinality is enforced by unique indexes. Linking and unlinking require update access to the
+ * source record and read access to the target record (ADR-004 module permissions and record scopes). Also the {@link RecordDeletionGuard} applying each
  * relationship's {@link OnDelete} policy.
  */
 @Service
@@ -43,15 +50,19 @@ public class RelationshipService implements RecordDeletionGuard {
     private final RelationshipRepository repository;
     private final ModuleSchemas schemas;
     private final RecordReader records;
+    private final ModuleAccess access;
     private final AuditLog audit;
+    private final TransactionTemplate transactions;
     private final Clock clock;
 
     RelationshipService(RelationshipRepository repository, ModuleSchemas schemas, RecordReader records,
-            AuditLog audit, Clock clock) {
+            ModuleAccess access, AuditLog audit, TransactionTemplate transactions, Clock clock) {
         this.repository = repository;
         this.schemas = schemas;
         this.records = records;
+        this.access = access;
         this.audit = audit;
+        this.transactions = transactions;
         this.clock = clock;
     }
 
@@ -63,8 +74,8 @@ public class RelationshipService implements RecordDeletionGuard {
     public record RelationshipView(RelationshipRow relationship, String sourceModule, String targetModule) {
     }
 
-    /** A link together with the record on the other end. */
-    public record RelatedRecord(LinkRow link, ModuleSchema module, RecordView record) {
+    /** A link together with the record on the other end and the field policy for showing it. */
+    public record RelatedRecord(LinkRow link, ModuleSchema module, RecordView record, FieldPolicy fields) {
     }
 
     @Transactional
@@ -129,86 +140,101 @@ public class RelationshipService implements RecordDeletionGuard {
         return get(tenant, apiKey);
     }
 
-    @Transactional
+    /**
+     * Module access is resolved before the write transaction, so that access-denied audit events are not rolled back
+     * with it.
+     */
     public LinkRow link(TenantContext tenant, String apiKey, UUID sourceRecordId, UUID targetRecordId) {
         RelationshipRow relationship = relationship(tenant, apiKey, false);
         if (!relationship.active()) {
             throw ApiException.conflict("relationship_archived", "Relationship is archived");
         }
-        List<FieldViolation> violations = new ArrayList<>();
-        if (sourceRecordId == null || records.findActive(tenant.organizationId(), relationship.sourceModuleId(),
-                sourceRecordId).isEmpty()) {
-            violations.add(new FieldViolation("sourceRecordId", "invalid_reference",
-                    "no active record of the source module with this ID"));
-        }
-        if (targetRecordId == null || records.findActive(tenant.organizationId(), relationship.targetModuleId(),
-                targetRecordId).isEmpty()) {
-            violations.add(new FieldViolation("targetRecordId", "invalid_reference",
-                    "no active record of the target module with this ID"));
-        }
-        if (!violations.isEmpty()) {
-            throw ApiException.validation(violations);
-        }
-        LinkRow link = new LinkRow(UUID.randomUUID(), tenant.organizationId(), relationship.id(), sourceRecordId,
-                targetRecordId, SqlValues.now(clock), tenant.userId());
-        if (!repository.insertLink(link, relationship.cardinality())) {
-            if (repository.linkExists(tenant.organizationId(), relationship.id(), sourceRecordId, targetRecordId)) {
-                throw ApiException.conflict("link_exists", "These records are already linked");
+        ModuleGrant source = linkGrant(tenant, relationship.sourceModuleId(), RecordAction.UPDATE);
+        ModuleGrant target = linkGrant(tenant, relationship.targetModuleId(), RecordAction.READ);
+        return transactions.execute(status -> {
+            List<FieldViolation> violations = new ArrayList<>();
+            if (sourceRecordId == null || records.findActive(source, sourceRecordId).isEmpty()) {
+                violations.add(new FieldViolation("sourceRecordId", "invalid_reference",
+                        "no active record of the source module with this ID"));
             }
-            throw ApiException.conflict("cardinality_violation",
-                    "Link would violate the " + relationship.cardinality() + " cardinality of '" + apiKey + "'");
-        }
-        audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.linked", "record_link",
-                link.id()).with("relationship", apiKey).with("source", sourceRecordId.toString())
-                .with("target", targetRecordId.toString()));
-        return link;
+            if (targetRecordId == null || records.findActive(target, targetRecordId).isEmpty()) {
+                violations.add(new FieldViolation("targetRecordId", "invalid_reference",
+                        "no active record of the target module with this ID"));
+            }
+            if (!violations.isEmpty()) {
+                throw ApiException.validation(violations);
+            }
+            LinkRow link = new LinkRow(UUID.randomUUID(), tenant.organizationId(), relationship.id(), sourceRecordId,
+                    targetRecordId, SqlValues.now(clock), tenant.userId());
+            if (!repository.insertLink(link, relationship.cardinality())) {
+                if (repository.linkExists(tenant.organizationId(), relationship.id(), sourceRecordId,
+                        targetRecordId)) {
+                    throw ApiException.conflict("link_exists", "These records are already linked");
+                }
+                throw ApiException.conflict("cardinality_violation",
+                        "Link would violate the " + relationship.cardinality() + " cardinality of '" + apiKey + "'");
+            }
+            audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.linked", "record_link",
+                    link.id()).with("relationship", apiKey).with("source", sourceRecordId.toString())
+                    .with("target", targetRecordId.toString()));
+            return link;
+        });
     }
 
-    @Transactional
+    /** Like {@link #link}, module access is resolved before the write transaction. */
     public void unlink(TenantContext tenant, String apiKey, UUID linkId) {
         RelationshipRow relationship = relationship(tenant, apiKey, false);
-        LinkRow link = repository.findLink(tenant.organizationId(), relationship.id(), linkId)
-                .orElseThrow(() -> ApiException.notFound("Link"));
-        repository.deleteLink(tenant.organizationId(), link.id());
-        audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.unlinked", "record_link",
-                link.id()).with("relationship", apiKey).with("source", link.sourceRecordId().toString())
-                .with("target", link.targetRecordId().toString()));
+        ModuleGrant source = linkGrant(tenant, relationship.sourceModuleId(), RecordAction.UPDATE);
+        ModuleGrant target = linkGrant(tenant, relationship.targetModuleId(), RecordAction.READ);
+        transactions.executeWithoutResult(status -> {
+            LinkRow link = repository.findLink(tenant.organizationId(), relationship.id(), linkId)
+                    .orElseThrow(() -> ApiException.notFound("Link"));
+            if (records.findActive(source, link.sourceRecordId()).isEmpty()
+                    || records.findActive(target, link.targetRecordId()).isEmpty()) {
+                throw ApiException.notFound("Link");
+            }
+            repository.deleteLink(tenant.organizationId(), link.id());
+            audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.unlinked",
+                    "record_link", link.id()).with("relationship", apiKey)
+                    .with("source", link.sourceRecordId().toString()).with("target", link.targetRecordId().toString()));
+        });
     }
 
     /**
-     * Records related to {@code recordId} (of {@code moduleKey}) through a relationship. The direction follows from
-     * the module's side of the relationship; for self-relationships {@code incoming} selects the target side.
+     * Records related to {@code recordId} through a relationship, as seen by the holder of {@code sourceGrant} (read
+     * access to the record's module). The direction follows from the module's side of the relationship; for
+     * self-relationships {@code incoming} selects the target side. Reading the other side requires read access to its
+     * module: only records within that grant's scope are listed, and its field policy applies. Not transactional,
+     * so that an access-denied audit event for the other module is recorded.
      */
-    @Transactional(readOnly = true)
-    public PageResponse<RelatedRecord> related(TenantContext tenant, String moduleKey, UUID recordId, String apiKey,
+    public PageResponse<RelatedRecord> related(ModuleGrant sourceGrant, UUID recordId, String apiKey,
             boolean incoming, PageQuery page) {
-        ModuleSchema module = schemas.find(tenant.organizationId(), moduleKey)
-                .orElseThrow(() -> ApiException.notFound("Module"));
-        records.findActive(tenant.organizationId(), module.id(), recordId)
-                .orElseThrow(() -> ApiException.notFound("Record"));
+        TenantContext tenant = sourceGrant.tenant();
+        ModuleSchema module = sourceGrant.module();
+        records.findActive(sourceGrant, recordId).orElseThrow(() -> ApiException.notFound("Record"));
         RelationshipRow relationship = relationship(tenant, apiKey, false);
         boolean isSource = relationship.sourceModuleId().equals(module.id());
         boolean isTarget = relationship.targetModuleId().equals(module.id());
         if (!isSource && !isTarget) {
             throw ApiException.badRequest("module_not_in_relationship",
-                    "Module '" + moduleKey + "' is not part of relationship '" + apiKey + "'");
+                    "Module '" + module.apiKey() + "' is not part of relationship '" + apiKey + "'");
         }
         boolean outgoing = isSource && !(isTarget && incoming);
         UUID otherModuleId = outgoing ? relationship.targetModuleId() : relationship.sourceModuleId();
-        ModuleSchema other = schemas.findById(tenant.organizationId(), otherModuleId)
-                .orElseThrow(() -> ApiException.notFound("Module"));
-        List<LinkRow> links = repository.links(tenant.organizationId(), relationship.id(), recordId, outgoing,
+        ModuleGrant otherGrant = linkGrant(tenant, otherModuleId, RecordAction.READ);
+        RecordScopes.Predicate scope = RecordScopes.predicate(otherGrant.scope(), otherGrant.module(), "r", "s");
+        List<LinkRow> links = repository.links(tenant.organizationId(), relationship.id(), recordId, outgoing, scope,
                 page.offset(), page.size());
         Map<UUID, RecordView> others = records.findActive(tenant.organizationId(),
                 links.stream().map(link -> outgoing ? link.targetRecordId() : link.sourceRecordId()).toList())
                 .stream().collect(Collectors.toMap(RecordView::id, Function.identity()));
         List<RelatedRecord> items = links.stream()
-                .map(link -> new RelatedRecord(link, other, others.get(outgoing ? link.targetRecordId()
-                        : link.sourceRecordId())))
+                .map(link -> new RelatedRecord(link, otherGrant.module(), others.get(outgoing ? link.targetRecordId()
+                        : link.sourceRecordId()), otherGrant.fields()))
                 .filter(item -> item.record() != null)
                 .toList();
         return PageResponse.of(items, page,
-                repository.countLinks(tenant.organizationId(), relationship.id(), recordId, outgoing));
+                repository.countLinks(tenant.organizationId(), relationship.id(), recordId, outgoing, scope));
     }
 
     @Override
@@ -231,6 +257,13 @@ public class RelationshipService implements RecordDeletionGuard {
             audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.links_detached",
                     "record", record.id()).with("links", links.size()));
         }
+    }
+
+    /** Module access for one side of a relationship, checked for the caller of {@code tenant}. */
+    private ModuleGrant linkGrant(TenantContext tenant, UUID moduleId, RecordAction action) {
+        ModuleSchema module = schemas.findById(tenant.organizationId(), moduleId)
+                .orElseThrow(() -> ApiException.notFound("Module"));
+        return access.require(tenant, module.apiKey(), action);
     }
 
     private RelationshipRow relationship(TenantContext tenant, String apiKey, boolean forUpdate) {

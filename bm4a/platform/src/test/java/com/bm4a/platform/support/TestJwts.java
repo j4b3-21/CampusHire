@@ -57,6 +57,7 @@ public final class TestJwts {
         private Instant expiresAt = Instant.now().plusSeconds(300);
         private String email;
         private String name;
+        private boolean emailVerified = true;
         private final List<String> roles = new ArrayList<>();
         private RSAKey key = SIGNING_KEY;
 
@@ -68,6 +69,10 @@ public final class TestJwts {
 
         public String subject() {
             return subject;
+        }
+
+        public String email() {
+            return email;
         }
 
         public Builder issuer(String issuer) {
@@ -87,6 +92,12 @@ public final class TestJwts {
 
         public Builder email(String email) {
             this.email = email;
+            return this;
+        }
+
+        /** The {@code email_verified} claim ({@code true} unless changed). */
+        public Builder emailVerified(boolean emailVerified) {
+            this.emailVerified = emailVerified;
             return this;
         }
 
@@ -114,6 +125,7 @@ public final class TestJwts {
                     .expirationTime(Date.from(expiresAt))
                     .jwtID(UUID.randomUUID().toString())
                     .claim("email", email)
+                    .claim("email_verified", emailVerified)
                     .claim("name", name)
                     .claim("preferred_username", subject)
                     .claim("realm_access", Map.of("roles", List.copyOf(roles)))

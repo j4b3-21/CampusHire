@@ -16,6 +16,8 @@ import org.springframework.stereotype.Repository;
 import com.bm4a.platform.modules.shared.persistence.JsonColumns;
 import com.bm4a.platform.modules.tenancy.MembershipRole;
 
+import tools.jackson.databind.node.ObjectNode;
+
 /**
  * Every query is keyed by organization ID; membership lookups always include the user ID as well.
  */
@@ -25,10 +27,7 @@ class TenancyRepository {
     private final JdbcClient jdbc;
     private final JsonColumns json;
     private final RowMapper<OrganizationRow> organizationMapper;
-
-    private static final RowMapper<MembershipRow> MEMBERSHIP = (rs, n) -> new MembershipRow(
-            uuid(rs, "organization_id"), uuid(rs, "user_id"), MembershipRole.valueOf(rs.getString("role")),
-            rs.getString("status"), instant(rs, "created_at"), instant(rs, "updated_at"));
+    private final RowMapper<MembershipRow> membershipMapper;
 
     TenancyRepository(JdbcClient jdbc, JsonColumns json) {
         this.jdbc = jdbc;
@@ -36,6 +35,9 @@ class TenancyRepository {
         this.organizationMapper = (rs, n) -> new OrganizationRow(uuid(rs, "id"), rs.getString("name"),
                 rs.getString("status"), json.readObject(rs.getString("settings")), rs.getLong("version"),
                 instant(rs, "created_at"), uuid(rs, "created_by"), instant(rs, "updated_at"), uuid(rs, "updated_by"));
+        this.membershipMapper = (rs, n) -> new MembershipRow(uuid(rs, "organization_id"), uuid(rs, "user_id"),
+                MembershipRole.valueOf(rs.getString("role")), rs.getString("status"), uuid(rs, "role_id"),
+                json.readObject(rs.getString("attributes")), instant(rs, "created_at"), instant(rs, "updated_at"));
     }
 
     void insertOrganization(OrganizationRow org) {
@@ -101,7 +103,7 @@ class TenancyRepository {
         return jdbc.sql("SELECT * FROM membership WHERE organization_id = :org AND user_id = :user")
                 .param("org", organizationId)
                 .param("user", userId)
-                .query(MEMBERSHIP)
+                .query(membershipMapper)
                 .optional();
     }
 
@@ -113,8 +115,22 @@ class TenancyRepository {
                 .param("org", organizationId)
                 .param("limit", limit)
                 .param("offset", offset)
-                .query(MEMBERSHIP)
+                .query(membershipMapper)
                 .list();
+    }
+
+    /** Active memberships plus pending invitations that have not expired at {@code now} and hold the role. */
+    long countRoleAssignments(UUID organizationId, UUID roleId, Instant now) {
+        return jdbc.sql("""
+                SELECT (SELECT count(*) FROM membership
+                         WHERE organization_id = :org AND role_id = :role AND status = 'ACTIVE')
+                     + (SELECT count(*) FROM invitation
+                         WHERE organization_id = :org AND role_id = :role AND status = 'PENDING' AND expires_at > :now)
+                """)
+                .param("org", organizationId)
+                .param("role", roleId)
+                .param("now", ts(now))
+                .query(Long.class).single();
     }
 
     long countActiveMemberships(UUID organizationId) {
@@ -128,19 +144,23 @@ class TenancyRepository {
                 """).param("org", organizationId).query(Long.class).single();
     }
 
-    void upsertMembership(UUID organizationId, UUID userId, MembershipRole role, String status, UUID actor,
-            Instant now) {
+    void upsertMembership(UUID organizationId, UUID userId, MembershipRole role, String status, UUID roleId,
+            ObjectNode attributes, UUID actor, Instant now) {
         jdbc.sql("""
-                INSERT INTO membership (organization_id, user_id, role, status, created_at, created_by, updated_at, updated_by)
-                VALUES (:org, :user, :role, :status, :now, :actor, :now, :actor)
+                INSERT INTO membership (organization_id, user_id, role, status, role_id, attributes, created_at,
+                                        created_by, updated_at, updated_by)
+                VALUES (:org, :user, :role, :status, :roleId, CAST(:attributes AS jsonb), :now, :actor, :now, :actor)
                 ON CONFLICT (organization_id, user_id)
-                DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at,
+                DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status, role_id = EXCLUDED.role_id,
+                              attributes = EXCLUDED.attributes, updated_at = EXCLUDED.updated_at,
                               updated_by = EXCLUDED.updated_by
                 """)
                 .param("org", organizationId)
                 .param("user", userId)
                 .param("role", role.name())
                 .param("status", status)
+                .param("roleId", roleId)
+                .param("attributes", json.write(attributes))
                 .param("now", ts(now))
                 .param("actor", actor)
                 .update();

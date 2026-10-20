@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.bm4a.platform.modules.access.ModuleAccess;
+import com.bm4a.platform.modules.access.ModuleGrant;
+import com.bm4a.platform.modules.access.RecordAction;
 import com.bm4a.platform.modules.authorization.Permission;
 import com.bm4a.platform.modules.records.RecordData;
 import com.bm4a.platform.modules.relationships.internal.LinkRow;
@@ -37,6 +40,10 @@ import com.bm4a.platform.modules.users.CurrentUser;
 
 import tools.jackson.databind.JsonNode;
 
+/**
+ * Relationship definitions ({@code METADATA_MANAGE} to change), links and related records. Links and related-record
+ * listings are authorized per module by the relationship service (ADR-004).
+ */
 @RestController
 class RelationshipController {
 
@@ -44,10 +51,12 @@ class RelationshipController {
 
     private final RelationshipService relationships;
     private final TenantAccess access;
+    private final ModuleAccess modules;
 
-    RelationshipController(RelationshipService relationships, TenantAccess access) {
+    RelationshipController(RelationshipService relationships, TenantAccess access, ModuleAccess modules) {
         this.relationships = relationships;
         this.access = access;
+        this.modules = modules;
     }
 
     @PostMapping(BASE)
@@ -85,14 +94,14 @@ class RelationshipController {
     @ResponseStatus(HttpStatus.CREATED)
     LinkResponse link(CurrentUser user, @PathVariable UUID orgId, @PathVariable String key,
             @RequestBody LinkRequest request) {
-        TenantContext tenant = access.require(user, orgId, Permission.RECORDS_WRITE);
+        TenantContext tenant = access.require(user, orgId, Permission.ORGANIZATION_VIEW);
         return LinkResponse.of(relationships.link(tenant, key, request.sourceRecordId(), request.targetRecordId()));
     }
 
     @DeleteMapping(BASE + "/{key}/links/{linkId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void unlink(CurrentUser user, @PathVariable UUID orgId, @PathVariable String key, @PathVariable UUID linkId) {
-        TenantContext tenant = access.require(user, orgId, Permission.RECORDS_WRITE);
+        TenantContext tenant = access.require(user, orgId, Permission.ORGANIZATION_VIEW);
         relationships.unlink(tenant, key, linkId);
     }
 
@@ -101,9 +110,9 @@ class RelationshipController {
             @PathVariable UUID recordId, @PathVariable String key,
             @RequestParam(defaultValue = "outgoing") String direction, @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        TenantContext tenant = access.require(user, orgId, Permission.RECORDS_READ);
-        return relationships.related(tenant, moduleKey, recordId, key, "incoming".equals(direction),
-                PageQuery.of(page, size)).map(RelatedResponse::of);
+        ModuleGrant grant = modules.require(user, orgId, moduleKey, RecordAction.READ);
+        return relationships.related(grant, recordId, key, "incoming".equals(direction), PageQuery.of(page, size))
+                .map(RelatedResponse::of);
     }
 
     record LinkRequest(UUID sourceRecordId, UUID targetRecordId) {
@@ -132,7 +141,8 @@ class RelationshipController {
 
         static RelatedResponse of(RelatedRecord related) {
             return new RelatedResponse(related.link().id(), related.module().apiKey(), related.record().id(),
-                    related.record().version(), RecordData.visible(related.module(), related.record().data()));
+                    related.record().version(),
+                    RecordData.visible(related.module(), related.record().data(), related.fields()));
         }
     }
 }

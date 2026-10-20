@@ -24,15 +24,34 @@ public sealed interface TenancyEvent {
             implements TenancyEvent {
     }
 
-    record MembershipGranted(UUID organizationId, UUID actorUserId, UUID userId, MembershipRole role)
-            implements TenancyEvent {
+    /** @param roleKey org role, {@code null} for none */
+    record MembershipGranted(UUID organizationId, UUID actorUserId, UUID userId, MembershipRole role, String roleKey,
+            Map<String, Object> attributes) implements TenancyEvent {
     }
 
     record MembershipRoleChanged(UUID organizationId, UUID actorUserId, UUID userId, MembershipRole from,
             MembershipRole to) implements TenancyEvent {
     }
 
+    /** The org role and/or the attributes of an active membership changed. */
+    record MembershipAccessChanged(UUID organizationId, UUID actorUserId, UUID userId, String fromRoleKey,
+            String toRoleKey, Map<String, Object> fromAttributes, Map<String, Object> toAttributes)
+            implements TenancyEvent {
+    }
+
     record MembershipRevoked(UUID organizationId, UUID actorUserId, UUID userId, MembershipRole role)
+            implements TenancyEvent {
+    }
+
+    record InvitationCreated(UUID organizationId, UUID actorUserId, UUID invitationId, String email,
+            MembershipRole role, String roleKey) implements TenancyEvent {
+    }
+
+    record InvitationRevoked(UUID organizationId, UUID actorUserId, UUID invitationId, String email)
+            implements TenancyEvent {
+    }
+
+    record InvitationAccepted(UUID organizationId, UUID actorUserId, UUID invitationId, String email)
             implements TenancyEvent {
     }
 

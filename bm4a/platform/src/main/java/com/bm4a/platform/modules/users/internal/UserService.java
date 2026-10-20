@@ -62,7 +62,8 @@ public class UserService implements UserDirectory {
         if (!Objects.equals(user.email(), claims.email()) || !Objects.equals(user.displayName(), claims.displayName())) {
             users.updateClaims(user.id(), claims.email(), claims.displayName(), now);
         }
-        return new CurrentUser(user.id(), claims.email(), claims.displayName(), claims.platformAdmin());
+        return new CurrentUser(user.id(), claims.email(), claims.displayName(), claims.platformAdmin(),
+                claims.emailVerified());
     }
 
     @Transactional(readOnly = true)

@@ -19,3 +19,19 @@ type organization
     define can_read_records: member
     define can_write_records: member
     define can_view_audit: admin
+
+# Organization role (ADR-004); assignees are the members whose membership references the role.
+type role
+  relations
+    define organization: [organization]
+    define assignee: [user]
+
+# Tenant module (ADR-004). MEMBERS access mode grants organization#member; ROLES mode only role#assignee usersets.
+type module
+  relations
+    define organization: [organization]
+    define reader: [user, role#assignee, organization#member]
+    define writer: [user, role#assignee, organization#member]
+
+    define can_read: reader or writer or admin from organization
+    define can_write: writer or admin from organization

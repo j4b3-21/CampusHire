@@ -17,6 +17,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.bm4a.platform.modules.access.FieldPolicy;
+import com.bm4a.platform.modules.access.ModuleGrant;
+import com.bm4a.platform.modules.access.RecordAction;
+import com.bm4a.platform.modules.access.RecordScope;
 import com.bm4a.platform.modules.audit.AuditEntry;
 import com.bm4a.platform.modules.audit.AuditLog;
 import com.bm4a.platform.modules.metadata.FieldSchema;
@@ -28,8 +32,12 @@ import com.bm4a.platform.modules.metadata.ModuleSchemas;
 import com.bm4a.platform.modules.records.RecordData;
 import com.bm4a.platform.modules.records.RecordDeletionGuard;
 import com.bm4a.platform.modules.records.RecordEvent;
+import com.bm4a.platform.modules.records.RecordOperations;
 import com.bm4a.platform.modules.records.RecordReader;
+import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.records.RecordView;
+import com.bm4a.platform.modules.records.RecordWrite;
+import com.bm4a.platform.modules.records.RecordWriteGuard;
 import com.bm4a.platform.modules.records.internal.RecordPayloadValidator.Mode;
 import com.bm4a.platform.modules.records.internal.RecordPayloadValidator.Result;
 import com.bm4a.platform.modules.shared.error.ApiException;
@@ -39,114 +47,91 @@ import com.bm4a.platform.modules.shared.persistence.SqlValues;
 import com.bm4a.platform.modules.shared.web.PageQuery;
 import com.bm4a.platform.modules.shared.web.PageResponse;
 import com.bm4a.platform.modules.tenancy.TenantContext;
+import com.bm4a.platform.modules.users.UserDirectory;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * The generic record lifecycle. Every operation is scoped by the verified {@link TenantContext} and the module
- * resolved for that tenant; IDs from other tenants or modules behave exactly like missing IDs (404). Each change
- * increments the record version, writes a history snapshot and an audit event, and publishes a {@link RecordEvent},
- * all in one transaction.
+ * The generic record lifecycle. API operations take the {@link ModuleGrant} issued by {@code ModuleAccess}: the grant's
+ * record scope is a bound SQL predicate on every lookup (records outside it behave exactly like missing ones, 404),
+ * and its field policy filters what is read and written. Trusted operations ({@link RecordOperations}) run with an
+ * unrestricted grant. Each change increments the record version, writes a history snapshot and an audit event, and
+ * publishes a {@link RecordEvent}, all in one transaction.
  */
 @Service
-public class RecordService implements RecordReader {
+public class RecordService implements RecordReader, RecordOperations {
 
     private static final int AUDIT_VALUE_LIMIT = 256;
+    private static final String SCOPE_PARAM_PREFIX = "s";
 
     private final RecordRepository repository;
     private final ModuleSchemas schemas;
     private final RecordPayloadValidator validator;
     private final ObjectProvider<RecordDeletionGuard> deletionGuards;
+    private final ObjectProvider<RecordWriteGuard> writeGuards;
+    private final UserDirectory users;
     private final AuditLog audit;
     private final ApplicationEventPublisher events;
     private final JsonColumns json;
     private final Clock clock;
 
     RecordService(RecordRepository repository, ModuleSchemas schemas, RecordPayloadValidator validator,
-            ObjectProvider<RecordDeletionGuard> deletionGuards, AuditLog audit, ApplicationEventPublisher events,
-            JsonColumns json, Clock clock) {
+            ObjectProvider<RecordDeletionGuard> deletionGuards, ObjectProvider<RecordWriteGuard> writeGuards,
+            UserDirectory users, AuditLog audit, ApplicationEventPublisher events, JsonColumns json, Clock clock) {
         this.repository = repository;
         this.schemas = schemas;
         this.validator = validator;
         this.deletionGuards = deletionGuards;
+        this.writeGuards = writeGuards;
+        this.users = users;
         this.audit = audit;
         this.events = events;
         this.json = json;
         this.clock = clock;
     }
 
-    @Transactional(readOnly = true)
-    public ModuleSchema module(TenantContext tenant, String moduleKey) {
-        return schemas.find(tenant.organizationId(), moduleKey).orElseThrow(() -> ApiException.notFound("Module"));
-    }
+    // ---- record API (authorized by ModuleAccess) -----------------------------------------------------------
 
     @Transactional
-    public RecordView create(TenantContext tenant, String moduleKey, JsonNode data) {
-        ModuleSchema module = writableModule(tenant, moduleKey);
-        Result result = validator.apply(module, data, null, Mode.CREATE);
-        UUID id = UUID.randomUUID();
-        Instant now = SqlValues.now(clock);
-        RecordView record = new RecordView(id, tenant.organizationId(), module.id(), result.data(), 1,
-                module.version(), now, tenant.userId(), now, tenant.userId(), null, null);
-        validateLookups(tenant, module, result.data(), result.changedFields());
-        repository.insert(record);
-        claimUniqueValues(tenant, module, record.id(), json.newObject(), result.data(), result.changedFields());
-        repository.insertVersion(record, "CREATED", now, tenant.userId());
-        audit.record(entry(tenant, "record.created", module, record).with("fields", result.changedFields()));
-        events.publishEvent(new RecordEvent.Created(tenant.organizationId(), module.id(), id, 1, tenant.userId()));
-        return record;
+    public RecordView create(ModuleGrant grant, JsonNode data) {
+        return create(grant, data, grant.tenant().userId(), false);
     }
 
     @Transactional(readOnly = true)
-    public RecordView get(TenantContext tenant, String moduleKey, UUID id) {
-        ModuleSchema module = module(tenant, moduleKey);
-        return repository.find(tenant.organizationId(), module.id(), id, false)
-                .filter(record -> !record.deleted())
-                .orElseThrow(() -> ApiException.notFound("Record"));
+    public RecordView get(ModuleGrant grant, UUID id) {
+        return findActive(grant, id).orElseThrow(() -> ApiException.notFound("Record"));
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<RecordView> list(TenantContext tenant, String moduleKey, Map<String, List<String>> parameters,
-            String sort, String search, boolean deleted, PageQuery page) {
-        ModuleSchema module = module(tenant, moduleKey);
-        RecordQuery query = RecordQuery.build(tenant.organizationId(), module, parameters, sort, search, deleted);
+    public PageResponse<RecordView> list(ModuleGrant grant, Map<String, List<String>> parameters, String sort,
+            String search, boolean deleted, PageQuery page) {
+        RecordQuery query = RecordQuery.build(grant.tenant().organizationId(), grant.module(), parameters, sort, search,
+                deleted, grant.fields(), scope(grant));
         return PageResponse.of(repository.list(query, page.offset(), page.size()), page, repository.count(query));
     }
 
     @Transactional
-    public RecordView replace(TenantContext tenant, String moduleKey, UUID id, long expectedVersion, JsonNode data) {
-        return update(tenant, moduleKey, id, expectedVersion, data, Mode.REPLACE, "UPDATED");
+    public RecordView replace(ModuleGrant grant, UUID id, long expectedVersion, JsonNode data) {
+        return update(grant, id, expectedVersion, data, Mode.REPLACE, "UPDATED", false);
     }
 
     @Transactional
-    public RecordView patch(TenantContext tenant, String moduleKey, UUID id, long expectedVersion, JsonNode data) {
-        return update(tenant, moduleKey, id, expectedVersion, data, Mode.MERGE, "UPDATED");
+    public RecordView patch(ModuleGrant grant, UUID id, long expectedVersion, JsonNode data) {
+        return update(grant, id, expectedVersion, data, Mode.MERGE, "UPDATED", false);
     }
 
     @Transactional
-    public RecordView delete(TenantContext tenant, String moduleKey, UUID id, long expectedVersion) {
-        ModuleSchema module = writableModule(tenant, moduleKey);
-        RecordView current = lockActive(tenant, module, id, expectedVersion);
-        rejectInboundRestrictingLookups(tenant, module, current);
-        deletionGuards.orderedStream().forEach(guard -> guard.beforeDelete(tenant, module, current));
-        repository.releaseAllUnique(tenant.organizationId(), id);
-        Instant now = SqlValues.now(clock);
-        RecordView deleted = new RecordView(id, current.organizationId(), current.moduleId(), current.data(),
-                current.version() + 1, current.definitionVersion(), current.createdAt(), current.createdBy(), now,
-                tenant.userId(), now, tenant.userId());
-        repository.update(deleted);
-        repository.insertVersion(deleted, "DELETED", now, tenant.userId());
-        audit.record(entry(tenant, "record.deleted", module, deleted));
-        events.publishEvent(new RecordEvent.Deleted(tenant.organizationId(), module.id(), id, deleted.version(),
-                tenant.userId()));
-        return deleted;
+    public RecordView delete(ModuleGrant grant, UUID id, long expectedVersion) {
+        return softDelete(grant, id, expectedVersion);
     }
 
     @Transactional
-    public RecordView restore(TenantContext tenant, String moduleKey, UUID id, long expectedVersion) {
-        ModuleSchema module = writableModule(tenant, moduleKey);
-        RecordView current = repository.find(tenant.organizationId(), module.id(), id, true)
+    public RecordView restore(ModuleGrant grant, UUID id, long expectedVersion) {
+        TenantContext tenant = grant.tenant();
+        ModuleSchema module = writable(grant);
+        RecordView current = repository.find(tenant.organizationId(), module.id(), id, scope(grant), true)
                 .orElseThrow(() -> ApiException.notFound("Record"));
         if (!current.deleted()) {
             throw ApiException.conflict("not_deleted", "Record is not deleted");
@@ -157,7 +142,7 @@ public class RecordService implements RecordReader {
         Instant now = SqlValues.now(clock);
         RecordView restored = new RecordView(id, current.organizationId(), current.moduleId(), current.data(),
                 current.version() + 1, current.definitionVersion(), current.createdAt(), current.createdBy(), now,
-                tenant.userId(), null, null);
+                tenant.userId(), null, null, current.ownerUserId());
         repository.update(restored);
         repository.insertVersion(restored, "RESTORED", now, tenant.userId());
         audit.record(entry(tenant, "record.restored", module, restored));
@@ -166,35 +151,41 @@ public class RecordService implements RecordReader {
         return restored;
     }
 
+    /** History of a record within the grant's scope, including soft-deleted records. */
     @Transactional(readOnly = true)
-    public PageResponse<RecordVersion> versions(TenantContext tenant, String moduleKey, UUID id, PageQuery page) {
-        ModuleSchema module = module(tenant, moduleKey);
-        repository.find(tenant.organizationId(), module.id(), id, false).orElseThrow(() -> ApiException.notFound("Record"));
-        return PageResponse.of(repository.versions(tenant.organizationId(), id, page.offset(), page.size()), page,
-                repository.countVersions(tenant.organizationId(), id));
+    public PageResponse<RecordVersion> versions(ModuleGrant grant, UUID id, PageQuery page) {
+        UUID org = grant.tenant().organizationId();
+        repository.find(org, grant.module().id(), id, scope(grant), false)
+                .orElseThrow(() -> ApiException.notFound("Record"));
+        return PageResponse.of(repository.versions(org, id, page.offset(), page.size()), page,
+                repository.countVersions(org, id));
     }
 
     @Transactional(readOnly = true)
-    public RecordVersion version(TenantContext tenant, String moduleKey, UUID id, long version) {
-        ModuleSchema module = module(tenant, moduleKey);
-        repository.find(tenant.organizationId(), module.id(), id, false).orElseThrow(() -> ApiException.notFound("Record"));
-        return repository.version(tenant.organizationId(), id, version)
-                .orElseThrow(() -> ApiException.notFound("Record version"));
+    public RecordVersion version(ModuleGrant grant, UUID id, long version) {
+        UUID org = grant.tenant().organizationId();
+        repository.find(org, grant.module().id(), id, scope(grant), false)
+                .orElseThrow(() -> ApiException.notFound("Record"));
+        return repository.version(org, id, version).orElseThrow(() -> ApiException.notFound("Record version"));
     }
 
     /**
      * Restores the field values of an earlier version as a new version. The old values are re-validated against the
-     * current definitions; values of fields archived since then are kept as they are now.
+     * current definitions; values of fields archived since then, or hidden from the caller, are kept as they are now.
      */
     @Transactional
-    public RecordView revert(TenantContext tenant, String moduleKey, UUID id, long targetVersion,
-            long expectedVersion) {
-        ModuleSchema module = module(tenant, moduleKey);
-        RecordVersion old = repository.version(tenant.organizationId(), id, targetVersion)
+    public RecordView revert(ModuleGrant grant, UUID id, long targetVersion, long expectedVersion) {
+        UUID org = grant.tenant().organizationId();
+        repository.find(org, grant.module().id(), id, scope(grant), false)
+                .filter(record -> !record.deleted())
+                .orElseThrow(() -> ApiException.notFound("Record"));
+        RecordVersion old = repository.version(org, id, targetVersion)
                 .orElseThrow(() -> ApiException.notFound("Record version"));
-        ObjectNode payload = RecordData.visible(module, old.data());
-        return update(tenant, moduleKey, id, expectedVersion, payload, Mode.REPLACE, "REVERTED");
+        ObjectNode payload = RecordData.visible(grant.module(), old.data(), grant.fields());
+        return update(grant, id, expectedVersion, payload, Mode.REPLACE, "REVERTED", false);
     }
+
+    // ---- RecordReader --------------------------------------------------------------------------------------
 
     @Override
     @Transactional(readOnly = true)
@@ -208,22 +199,142 @@ public class RecordService implements RecordReader {
         return repository.findActive(organizationId, recordIds);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RecordView> findActive(ModuleGrant grant, UUID recordId) {
+        return repository.find(grant.tenant().organizationId(), grant.module().id(), recordId, scope(grant), false)
+                .filter(record -> !record.deleted());
+    }
+
+    // ---- RecordOperations (trusted, no permission checks) --------------------------------------------------
+
+    @Override
+    @Transactional
+    public RecordView create(TenantContext tenant, String moduleKey, JsonNode data, UUID ownerUserId) {
+        UUID owner = ownerUserId == null ? tenant.userId() : activeUser(ownerUserId);
+        return create(trusted(tenant, moduleKey, RecordAction.CREATE), data, owner, true);
+    }
+
+    @Override
+    @Transactional
+    public RecordView patch(TenantContext tenant, String moduleKey, UUID id, Long expectedVersion, JsonNode data) {
+        return update(trusted(tenant, moduleKey, RecordAction.UPDATE), id, expectedVersion, data, Mode.MERGE,
+                "UPDATED", true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RecordView> get(TenantContext tenant, String moduleKey, UUID id) {
+        return findActive(trusted(tenant, moduleKey, RecordAction.READ), id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RecordView> findActiveByField(UUID organizationId, String moduleKey, String fieldKey,
+            JsonNode value) {
+        ModuleSchema module = schemas.find(organizationId, moduleKey).orElseThrow(() -> ApiException.notFound("Module"));
+        FieldSchema field = module.field(fieldKey).filter(FieldSchema::visible)
+                .orElseThrow(() -> ApiException.validation("fieldKey", "unknown_field", "unknown field " + fieldKey));
+        FieldValues.Outcome outcome = FieldValues.canonicalize(field, value, value);
+        if (!outcome.valid()) {
+            throw ApiException.validation("value", outcome.code(), outcome.message());
+        }
+        if (!outcome.hasValue()) {
+            return Optional.empty();
+        }
+        return repository.findFirstActiveContaining(organizationId, module.id(),
+                RecordRepository.containment(field.apiKey(), outcome.value(), json));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<RecordView> list(TenantContext tenant, String moduleKey, Map<String, List<String>> filters,
+            String sort, String q, RecordScope scope, PageQuery page) {
+        ModuleSchema module = module(tenant, moduleKey);
+        ModuleGrant grant = new ModuleGrant(tenant, module, RecordAction.READ, scope == null ? RecordScope.all() : scope,
+                FieldPolicy.unrestricted(), null);
+        return list(grant, filters == null ? Map.of() : filters, sort, q, false, page);
+    }
+
+    @Override
+    @Transactional
+    public RecordView transferOwner(TenantContext tenant, String moduleKey, UUID id, UUID newOwnerUserId) {
+        ModuleGrant grant = trusted(tenant, moduleKey, RecordAction.UPDATE);
+        ModuleSchema module = writable(grant);
+        UUID owner = activeUser(Objects.requireNonNull(newOwnerUserId, "newOwnerUserId"));
+        RecordView current = lockActive(grant, id, null);
+        if (owner.equals(current.ownerUserId())) {
+            return current;
+        }
+        Instant now = SqlValues.now(clock);
+        RecordView updated = new RecordView(id, current.organizationId(), current.moduleId(), current.data(),
+                current.version() + 1, current.definitionVersion(), current.createdAt(), current.createdBy(), now,
+                tenant.userId(), null, null, owner);
+        repository.update(updated);
+        repository.insertVersion(updated, "UPDATED", now, tenant.userId());
+        audit.record(entry(tenant, "record.owner_transferred", module, updated)
+                .with("from", Objects.toString(current.ownerUserId(), null)).with("to", owner.toString()));
+        events.publishEvent(new RecordEvent.Updated(tenant.organizationId(), module.id(), id, updated.version(),
+                tenant.userId(), List.of()));
+        return updated;
+    }
+
+    @Override
+    @Transactional
+    public RecordView delete(TenantContext tenant, String moduleKey, UUID id, Long expectedVersion) {
+        return softDelete(trusted(tenant, moduleKey, RecordAction.DELETE), id, expectedVersion);
+    }
+
     // ---- internals -----------------------------------------------------------------------------------------
 
-    private RecordView update(TenantContext tenant, String moduleKey, UUID id, long expectedVersion, JsonNode data,
-            Mode mode, String changeType) {
-        ModuleSchema module = writableModule(tenant, moduleKey);
-        RecordView current = lockActive(tenant, module, id, expectedVersion);
-        Result result = validator.apply(module, data, current.data(), mode);
+    @Transactional(readOnly = true)
+    public ModuleSchema module(TenantContext tenant, String moduleKey) {
+        return schemas.find(tenant.organizationId(), moduleKey).orElseThrow(() -> ApiException.notFound("Module"));
+    }
+
+    private ModuleGrant trusted(TenantContext tenant, String moduleKey, RecordAction action) {
+        return ModuleGrant.trusted(tenant, module(tenant, moduleKey), action);
+    }
+
+    private RecordView create(ModuleGrant grant, JsonNode data, UUID owner, boolean trusted) {
+        TenantContext tenant = grant.tenant();
+        ModuleSchema module = writable(grant);
+        Result result = validator.apply(module, data, null, Mode.CREATE, grant.fields());
+        UUID id = UUID.randomUUID();
+        guard(grant, id, null, result, trusted);
+        Instant now = SqlValues.now(clock);
+        RecordView record = new RecordView(id, tenant.organizationId(), module.id(), result.data(), 1,
+                module.version(), now, tenant.userId(), now, tenant.userId(), null, null, owner);
+        validateLookups(tenant, module, result.data(), result.changedFields());
+        repository.insert(record);
+        claimUniqueValues(tenant, module, record.id(), json.newObject(), result.data(), result.changedFields());
+        repository.insertVersion(record, "CREATED", now, tenant.userId());
+        audit.record(entry(tenant, "record.created", module, record).with("fields", result.changedFields()));
+        events.publishEvent(new RecordEvent.Created(tenant.organizationId(), module.id(), id, 1, tenant.userId()));
+        return record;
+    }
+
+    /** {@code expectedVersion} {@code null} skips the concurrency check (trusted operations only). */
+    private RecordView update(ModuleGrant grant, UUID id, Long expectedVersion, JsonNode data, Mode mode,
+            String changeType, boolean trusted) {
+        TenantContext tenant = grant.tenant();
+        ModuleSchema module = writable(grant);
+        RecordView current = lockActive(grant, id, expectedVersion);
+        Result result = validator.apply(module, data, current.data(), mode, grant.fields());
         if (result.changedFields().isEmpty()) {
             return current;
         }
+        if (!RecordScopes.matches(grant.scope(), module, id, current.ownerUserId(), result.data())) {
+            throw ApiException.forbidden("scope_violation",
+                    "The change would move the record outside the records you may update");
+        }
+        guard(grant, id, current, result, trusted);
         validateLookups(tenant, module, result.data(), result.changedFields());
         claimUniqueValues(tenant, module, id, current.data(), result.data(), result.changedFields());
         Instant now = SqlValues.now(clock);
         RecordView updated = new RecordView(id, current.organizationId(), current.moduleId(), result.data(),
                 current.version() + 1, module.version(), current.createdAt(), current.createdBy(), now,
-                tenant.userId(), null, null);
+                tenant.userId(), null, null, current.ownerUserId());
         repository.update(updated);
         repository.insertVersion(updated, changeType, now, tenant.userId());
         audit.record(entry(tenant, "REVERTED".equals(changeType) ? "record.reverted" : "record.updated", module, updated)
@@ -233,19 +344,50 @@ public class RecordService implements RecordReader {
         return updated;
     }
 
-    private ModuleSchema writableModule(TenantContext tenant, String moduleKey) {
-        ModuleSchema module = module(tenant, moduleKey);
-        if (!module.active()) {
-            throw ApiException.conflict("module_archived", "Module is archived; its records are read-only");
-        }
-        return module;
+    private RecordView softDelete(ModuleGrant grant, UUID id, Long expectedVersion) {
+        TenantContext tenant = grant.tenant();
+        ModuleSchema module = writable(grant);
+        RecordView current = lockActive(grant, id, expectedVersion);
+        rejectInboundRestrictingLookups(tenant, module, current);
+        deletionGuards.orderedStream().forEach(guard -> guard.beforeDelete(tenant, module, current));
+        repository.releaseAllUnique(tenant.organizationId(), id);
+        Instant now = SqlValues.now(clock);
+        RecordView deleted = new RecordView(id, current.organizationId(), current.moduleId(), current.data(),
+                current.version() + 1, current.definitionVersion(), current.createdAt(), current.createdBy(), now,
+                tenant.userId(), now, tenant.userId(), current.ownerUserId());
+        repository.update(deleted);
+        repository.insertVersion(deleted, "DELETED", now, tenant.userId());
+        audit.record(entry(tenant, "record.deleted", module, deleted));
+        events.publishEvent(new RecordEvent.Deleted(tenant.organizationId(), module.id(), id, deleted.version(),
+                tenant.userId()));
+        return deleted;
     }
 
-    private RecordView lockActive(TenantContext tenant, ModuleSchema module, UUID id, long expectedVersion) {
-        RecordView current = repository.find(tenant.organizationId(), module.id(), id, true)
+    private void guard(ModuleGrant grant, UUID id, RecordView before, Result result, boolean trusted) {
+        RecordWrite write = new RecordWrite(grant.tenant(), grant.module(), id, before, result.data(),
+                result.changedFields(), grant.roleKey(), grant.admin(), trusted);
+        writeGuards.orderedStream().forEach(guard -> guard.beforeWrite(write));
+    }
+
+    private RecordScopes.Predicate scope(ModuleGrant grant) {
+        return RecordScopes.predicate(grant.scope(), grant.module(), "r", SCOPE_PARAM_PREFIX);
+    }
+
+    private static ModuleSchema writable(ModuleGrant grant) {
+        if (!grant.module().active()) {
+            throw ApiException.conflict("module_archived", "Module is archived; its records are read-only");
+        }
+        return grant.module();
+    }
+
+    private RecordView lockActive(ModuleGrant grant, UUID id, Long expectedVersion) {
+        RecordView current = repository.find(grant.tenant().organizationId(), grant.module().id(), id, scope(grant),
+                true)
                 .filter(record -> !record.deleted())
                 .orElseThrow(() -> ApiException.notFound("Record"));
-        checkVersion(current, expectedVersion);
+        if (expectedVersion != null) {
+            checkVersion(current, expectedVersion);
+        }
         return current;
     }
 
@@ -253,6 +395,11 @@ public class RecordService implements RecordReader {
         if (current.version() != expectedVersion) {
             throw ApiException.versionConflict(current.version());
         }
+    }
+
+    private UUID activeUser(UUID userId) {
+        return users.findActive(userId).map(user -> user.id())
+                .orElseThrow(() -> ApiException.validation("ownerUserId", "unknown_user", "no active user with this ID"));
     }
 
     /** Lookup values must reference an active record of the target module in the same tenant. */
@@ -315,7 +462,7 @@ public class RecordService implements RecordReader {
                     continue;
                 }
                 String containment = RecordRepository.containment(field.apiKey(),
-                        tools.jackson.databind.node.JsonNodeFactory.instance.stringNode(record.id().toString()), json);
+                        JsonNodeFactory.instance.stringNode(record.id().toString()), json);
                 long count = repository.countActiveContaining(tenant.organizationId(), referencing.id(), containment);
                 if (referencing.id().equals(module.id()) && record.data().has(field.apiKey())
                         && record.id().toString().equals(record.data().get(field.apiKey()).asString())) {

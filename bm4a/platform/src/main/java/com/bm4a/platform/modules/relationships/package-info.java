@@ -4,7 +4,8 @@
  * record deletion through {@code RecordDeletionGuard} to restrict or detach links.
  */
 @ApplicationModule(id = "relationships", displayName = "Relationships",
-        allowedDependencies = { "shared", "users", "authorization", "tenancy", "audit", "metadata", "records" })
+        allowedDependencies = { "shared", "users", "authorization", "tenancy", "audit", "metadata", "records",
+                "access" })
 package com.bm4a.platform.modules.relationships;
 
 import org.springframework.modulith.ApplicationModule;

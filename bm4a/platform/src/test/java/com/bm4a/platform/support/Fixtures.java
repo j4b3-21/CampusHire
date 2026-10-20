@@ -63,6 +63,21 @@ public final class Fixtures {
                 .andExpect(status().isCreated());
     }
 
+    /** Adds a MEMBER with an org role and attributes (a JSON object, or {@code null}). */
+    public static void addMemberWithRole(Caller admin, String org, Caller member, String roleKey, String attributes)
+            throws Exception {
+        admin.post("/api/v1/orgs/{org}/members", "{\"userId\":\"" + member.id() + "\",\"role\":\"MEMBER\",\"roleKey\":\""
+                + roleKey + "\",\"attributes\":" + attributes + "}", org).andExpect(status().isCreated());
+    }
+
+    /** Creates an org role from {@code {apiKey, label, permissions}} and returns its ID. */
+    public static String createRole(Caller admin, String org, String definition) throws Exception {
+        MvcResult result = admin.post("/api/v1/orgs/{org}/roles", definition, org)
+                .andExpect(status().isCreated())
+                .andReturn();
+        return read(result, "$.id");
+    }
+
     /** Creates a record and returns its ID. */
     public static String createRecord(Caller caller, String org, String module, String data) throws Exception {
         MvcResult result = caller.post("/api/v1/orgs/{org}/modules/{module}/records", "{\"data\":" + data + "}", org,

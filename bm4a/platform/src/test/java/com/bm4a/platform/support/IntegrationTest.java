@@ -18,6 +18,6 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import({ TestcontainersConfiguration.class, TestSecurityConfiguration.class })
+@Import({ TestcontainersConfiguration.class, TestSecurityConfiguration.class, TestRecordWriteGuard.class })
 public @interface IntegrationTest {
 }

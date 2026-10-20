@@ -7,8 +7,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+import com.bm4a.platform.modules.access.FieldPolicy;
 import com.bm4a.platform.modules.metadata.FieldSchema;
 import com.bm4a.platform.modules.metadata.FieldStatus;
 import com.bm4a.platform.modules.metadata.FieldValues;
@@ -31,6 +33,10 @@ import tools.jackson.databind.node.ObjectNode;
  * </ul>
  * Unknown and archived keys are rejected, read-only and deprecated fields cannot be changed, and every ACTIVE required
  * field must have a value afterwards.
+ * <p>
+ * The caller's {@link FieldPolicy} (ADR-004) applies on top: hidden fields behave like archived ones for the caller
+ * (their values are preserved on full replacement) but are reported as 403 {@code field_hidden}; changing a policy
+ * read-only field is 403 {@code field_read_only}, and omitting it from a full replacement keeps its value.
  */
 @Component
 class RecordPayloadValidator {
@@ -45,22 +51,28 @@ class RecordPayloadValidator {
     record Result(ObjectNode data, List<String> changedFields) {
     }
 
-    Result apply(ModuleSchema module, JsonNode payload, ObjectNode current, Mode mode) {
+    Result apply(ModuleSchema module, JsonNode payload, ObjectNode current, Mode mode, FieldPolicy policy) {
         if (!(payload instanceof ObjectNode input)) {
             throw ApiException.validation("data", "type", "data must be a JSON object");
         }
         ObjectNode existing = current == null ? JsonNodeFactory.instance.objectNode() : current;
         List<FieldViolation> violations = new ArrayList<>();
+        List<FieldViolation> hidden = new ArrayList<>();
+        List<FieldViolation> readOnly = new ArrayList<>();
         ObjectNode next = switch (mode) {
             case CREATE -> JsonNodeFactory.instance.objectNode();
             case MERGE -> existing.deepCopy();
-            case REPLACE -> hiddenValues(module, existing);
+            case REPLACE -> hiddenValues(module, existing, policy);
         };
 
         for (String key : input.propertyNames()) {
             FieldSchema field = module.field(key).filter(FieldSchema::visible).orElse(null);
             if (field == null) {
                 violations.add(new FieldViolation("data." + key, "unknown_field", "unknown field"));
+                continue;
+            }
+            if (policy.hidden(key)) {
+                hidden.add(new FieldViolation("data." + key, "field_hidden", "field is not accessible"));
                 continue;
             }
             JsonNode previous = existing.get(key);
@@ -73,6 +85,11 @@ class RecordPayloadValidator {
             if (changes) {
                 if (field.readOnly()) {
                     violations.add(new FieldViolation("data." + key, "read_only", "field is read-only"));
+                    continue;
+                }
+                if (policy.readOnly(key)) {
+                    readOnly.add(new FieldViolation("data." + key, "field_read_only",
+                            "field is read-only for your role"));
                     continue;
                 }
                 if (field.status() == FieldStatus.DEPRECATED) {
@@ -91,7 +108,8 @@ class RecordPayloadValidator {
         if (mode == Mode.REPLACE) {
             for (FieldSchema field : module.fields()) {
                 if (field.visible() && !input.has(field.apiKey()) && existing.has(field.apiKey())) {
-                    if (field.readOnly() || field.status() == FieldStatus.DEPRECATED) {
+                    if (field.readOnly() || field.status() == FieldStatus.DEPRECATED
+                            || policy.readOnly(field.apiKey())) {
                         next.set(field.apiKey(), existing.get(field.apiKey()));
                     }
                 }
@@ -109,6 +127,14 @@ class RecordPayloadValidator {
                 violations.add(new FieldViolation("data." + field.apiKey(), "required", "field is required"));
             }
         }
+        if (!hidden.isEmpty()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "field_hidden",
+                    "The payload contains fields you cannot access", hidden);
+        }
+        if (!readOnly.isEmpty()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "field_read_only",
+                    "The payload changes fields that are read-only for your role", readOnly);
+        }
         if (!violations.isEmpty()) {
             throw ApiException.validation(violations);
         }
@@ -119,10 +145,11 @@ class RecordPayloadValidator {
         return new Result(next, changedFields(existing, next));
     }
 
-    private static ObjectNode hiddenValues(ModuleSchema module, ObjectNode existing) {
+    /** Values the caller cannot see: archived fields and fields hidden by the policy. */
+    private static ObjectNode hiddenValues(ModuleSchema module, ObjectNode existing, FieldPolicy policy) {
         ObjectNode hidden = existing.deepCopy();
         for (FieldSchema field : module.fields()) {
-            if (field.visible()) {
+            if (field.visible() && !policy.hidden(field.apiKey())) {
                 hidden.remove(field.apiKey());
             }
         }

@@ -17,4 +17,11 @@ import com.bm4a.platform.modules.users.CurrentUser;
 public interface TenantAccess {
 
     TenantContext require(CurrentUser user, UUID organizationId, Permission permission);
+
+    /**
+     * Steps 1 and 2 of {@link #require}: an active membership in an active organization, read from the database on
+     * every call. No permission is checked; callers authorize the operation themselves (for example the access
+     * module's module-level check).
+     */
+    ActiveMembership requireMembership(UUID userId, UUID organizationId);
 }

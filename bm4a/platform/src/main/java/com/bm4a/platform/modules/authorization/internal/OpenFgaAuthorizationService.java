@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.bm4a.platform.modules.authorization.AuthorizationService;
 import com.bm4a.platform.modules.authorization.AuthorizationUnavailableException;
+import com.bm4a.platform.modules.authorization.ModulePermission;
 import com.bm4a.platform.modules.authorization.Permission;
 import com.bm4a.platform.modules.authorization.RelationshipTuple;
 
@@ -34,10 +35,19 @@ class OpenFgaAuthorizationService implements AuthorizationService {
 
     @Override
     public boolean isAllowed(UUID userId, Permission permission, UUID organizationId) {
+        return check(userId, permission.relation(), RelationshipTuple.organizationRef(organizationId));
+    }
+
+    @Override
+    public boolean isAllowed(UUID userId, ModulePermission permission, UUID moduleId) {
+        return check(userId, permission.relation(), RelationshipTuple.moduleRef(moduleId));
+    }
+
+    private boolean check(UUID userId, String relation, String object) {
         ClientCheckRequest request = new ClientCheckRequest()
                 .user(RelationshipTuple.userRef(userId))
-                .relation(permission.relation())
-                ._object(RelationshipTuple.organizationRef(organizationId));
+                .relation(relation)
+                ._object(object);
         try {
             ClientCheckResponse response = client.check(request)
                     .get(properties.requestTimeout().toMillis() * 3, TimeUnit.MILLISECONDS);

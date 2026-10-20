@@ -9,4 +9,7 @@ import java.util.UUID;
 public interface AuthorizationService {
 
     boolean isAllowed(UUID userId, Permission permission, UUID organizationId);
+
+    /** Module-level decision on {@code module:<moduleId>} (tenant modules only; see ADR-004). */
+    boolean isAllowed(UUID userId, ModulePermission permission, UUID moduleId);
 }

@@ -14,6 +14,9 @@ public interface ModuleSchemas {
 
     Optional<ModuleSchema> findById(UUID organizationId, UUID moduleId);
 
+    /** Active modules visible to the tenant (its own and platform-global ones), ordered by API key. */
+    List<ModuleSchema> listActive(UUID organizationId);
+
     /** Modules visible to the tenant that have a lookup field targeting {@code moduleKey}. */
     List<ModuleSchema> referencing(UUID organizationId, String moduleKey);
 }

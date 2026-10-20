@@ -1,5 +1,7 @@
 package com.bm4a.platform.modules.authorization.internal;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -30,6 +32,8 @@ import dev.openfga.sdk.api.model.WriteRequestWrites;
 class TupleSynchronizer {
 
     private static final Logger log = LoggerFactory.getLogger(TupleSynchronizer.class);
+    /** OpenFGA's default limit of tuples per write request ({@code OPENFGA_MAX_TUPLES_PER_WRITE}). */
+    static final int MAX_TUPLES_PER_WRITE = 100;
 
     private final OpenFgaClient client;
     private final OpenFgaProperties properties;
@@ -41,19 +45,43 @@ class TupleSynchronizer {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     void on(RelationshipTuplesChanged event) throws Exception {
-        ClientWriteRequest request = new ClientWriteRequest()
-                .writes(event.writes().stream().map(TupleSynchronizer::write).toList())
-                .deletes(event.deletes().stream().map(TupleSynchronizer::delete).toList());
+        if (!event.hasChanges()) {
+            return;
+        }
         ClientWriteOptions options = new ClientWriteOptions()
                 .onDuplicate(WriteRequestWrites.OnDuplicateEnum.IGNORE)
                 .onMissing(WriteRequestDeletes.OnMissingEnum.IGNORE);
         try {
-            client.write(request, options).get(properties.requestTimeout().toMillis() * 3, TimeUnit.MILLISECONDS);
+            if (event.writes().size() + event.deletes().size() <= MAX_TUPLES_PER_WRITE) {
+                apply(new ClientWriteRequest()
+                        .writes(event.writes().stream().map(TupleSynchronizer::write).toList())
+                        .deletes(event.deletes().stream().map(TupleSynchronizer::delete).toList()), options);
+                return;
+            }
+            // Larger changes are split; every chunk is idempotent, so a partially applied event is safely replayed.
+            for (List<RelationshipTuple> chunk : chunks(event.deletes())) {
+                apply(new ClientWriteRequest().deletes(chunk.stream().map(TupleSynchronizer::delete).toList()), options);
+            }
+            for (List<RelationshipTuple> chunk : chunks(event.writes())) {
+                apply(new ClientWriteRequest().writes(chunk.stream().map(TupleSynchronizer::write).toList()), options);
+            }
         } catch (Exception ex) {
             log.error("OpenFGA tuple synchronization failed; it will be retried: {}",
                     OpenFgaConfiguration.unwrap(ex).toString());
             throw ex;
         }
+    }
+
+    private void apply(ClientWriteRequest request, ClientWriteOptions options) throws Exception {
+        client.write(request, options).get(properties.requestTimeout().toMillis() * 3, TimeUnit.MILLISECONDS);
+    }
+
+    private static List<List<RelationshipTuple>> chunks(List<RelationshipTuple> tuples) {
+        List<List<RelationshipTuple>> chunks = new ArrayList<>();
+        for (int i = 0; i < tuples.size(); i += MAX_TUPLES_PER_WRITE) {
+            chunks.add(tuples.subList(i, Math.min(tuples.size(), i + MAX_TUPLES_PER_WRITE)));
+        }
+        return chunks;
     }
 
     private static ClientTupleKey write(RelationshipTuple tuple) {

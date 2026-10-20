@@ -16,7 +16,7 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 0 - Organizations (create, settings, lifecycle, isolation) | Done | Archive by owner; suspend/reactivate by platform admin |
 | 0 - Subscription management | Deferred | Needs billing model |
 | 0 - Users: profiles, preferences | Done | `(issuer, subject)` identity, JIT provisioning |
-| 0 - Users: invitations, teams | Deferred | Members are added by user ID today; teams will be OpenFGA usersets |
+| 0 - Users: invitations, teams | Partial | E-mail invitations done (ADR-004: hashed single-use tokens, verified e-mail, 7-day expiry, `InvitationMailer` SPI); teams deferred (OpenFGA usersets) |
 | 0 - Authentication (OAuth2/OIDC, SSO, MFA, Google) | Done / Keycloak-configured | API validates issuer, audience, expiry, signature. MFA/Google/SSO are Keycloak realm settings |
 | 0 - Authorization: organization permissions (OpenFGA) | Done | Owner/admin/member model, fail-closed, outbox tuple sync |
 | 0 - Audit: data changes, security events | Done | Append-only (DB triggers), redaction; login tracking stays in Keycloak events |
@@ -27,7 +27,8 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 2 - Record engine (CRUD, soft delete, restore, versioning) | Done | JSONB, If-Match concurrency, history and revert, filters/sort/search |
 | 3 - Relationships (1:1, 1:N, N:M, lookups) | Done | Cardinality via unique indexes; restrict/detach delete behavior |
 | 4 - Permission engine: org permissions | Done | |
-| 4 - Module / record permissions, row-level security | Deferred | Next authorization milestone (ADR-002 lists the plan) |
+| 4 - Permission engine: org roles, module / record permissions, field security | Done | ADR-004: `access` module, OpenFGA `role`/`module` types, record scopes (OWN, ATTRIBUTE, `$id`, `where`) as SQL predicates, hidden/read-only fields, `/me/access`, `RecordOperations`, `RecordWriteGuard`, `MembershipAdministration` |
+| 4 - PostgreSQL row-level security | Deferred | Defense in depth per ADR-002 section 4 |
 | 5-8 - Workflow, automation, forms, reporting | Deferred | Extension point: `RecordEvent` published on every record change |
 | Admin UI | Deferred | API-first milestone: OpenAPI/Swagger UI, request collection |
 | Platform operations | Done | Docker (non-root), compose with health checks, CI, health probes, metrics, rate limiting |

@@ -37,6 +37,12 @@ spring:
     detection-strategy: explicitly-annotated
 
 bm4a:
+  app:
+    # Public URL of the web application; invitation links are <base-url>/invite/<token>.
+    base-url: ${APP_BASE_URL:http://localhost:3000}
+  metadata:
+    # One-off upgrade aid: write OpenFGA module tuples for modules created before migration V8 (idempotent).
+    sync-module-tuples-on-startup: ${BM4A_SYNC_MODULE_TUPLES:false}
   security:
     jwt:
       issuer-uri: ${KEYCLOAK_ISSUER_URI:http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:2346}/realms/${KEYCLOAK_REALM:bm4a}}

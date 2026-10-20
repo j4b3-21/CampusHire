@@ -34,6 +34,75 @@
           "can_view_audit": { "directly_related_user_types": [] }
         }
       }
+    },
+    {
+      "type": "role",
+      "relations": {
+        "organization": { "this": {} },
+        "assignee": { "this": {} }
+      },
+      "metadata": {
+        "relations": {
+          "organization": { "directly_related_user_types": [ { "type": "organization" } ] },
+          "assignee": { "directly_related_user_types": [ { "type": "user" } ] }
+        }
+      }
+    },
+    {
+      "type": "module",
+      "relations": {
+        "organization": { "this": {} },
+        "reader": { "this": {} },
+        "writer": { "this": {} },
+        "can_read": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "reader" } },
+              { "computedUserset": { "relation": "writer" } },
+              {
+                "tupleToUserset": {
+                  "tupleset": { "relation": "organization" },
+                  "computedUserset": { "relation": "admin" }
+                }
+              }
+            ]
+          }
+        },
+        "can_write": {
+          "union": {
+            "child": [
+              { "computedUserset": { "relation": "writer" } },
+              {
+                "tupleToUserset": {
+                  "tupleset": { "relation": "organization" },
+                  "computedUserset": { "relation": "admin" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "organization": { "directly_related_user_types": [ { "type": "organization" } ] },
+          "reader": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "role", "relation": "assignee" },
+              { "type": "organization", "relation": "member" }
+            ]
+          },
+          "writer": {
+            "directly_related_user_types": [
+              { "type": "user" },
+              { "type": "role", "relation": "assignee" },
+              { "type": "organization", "relation": "member" }
+            ]
+          },
+          "can_read": { "directly_related_user_types": [] },
+          "can_write": { "directly_related_user_types": [] }
+        }
+      }
     }
   ]
 }

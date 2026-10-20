@@ -49,9 +49,11 @@ public class OrganizationService {
         OrganizationRow org = new OrganizationRow(UUID.randomUUID(), normalizeName(name), OrganizationRow.ACTIVE,
                 validSettings(settings), 1, now, user.id(), now, user.id());
         repository.insertOrganization(org);
-        repository.upsertMembership(org.id(), user.id(), MembershipRole.OWNER, MembershipRow.ACTIVE, user.id(), now);
+        repository.upsertMembership(org.id(), user.id(), MembershipRole.OWNER, MembershipRow.ACTIVE, null,
+                json.newObject(), user.id(), now);
         events.publishEvent(new TenancyEvent.OrganizationCreated(org.id(), user.id(), org.name()));
-        events.publishEvent(new TenancyEvent.MembershipGranted(org.id(), user.id(), user.id(), MembershipRole.OWNER));
+        events.publishEvent(new TenancyEvent.MembershipGranted(org.id(), user.id(), user.id(), MembershipRole.OWNER,
+                null, Map.of()));
         events.publishEvent(RelationshipTuplesChanged.write(
                 RelationshipTuple.organization(user.id(), MembershipRole.OWNER.relation(), org.id())));
         return new OrganizationWithRole(org, MembershipRole.OWNER);
