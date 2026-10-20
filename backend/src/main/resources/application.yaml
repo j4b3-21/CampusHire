@@ -28,6 +28,8 @@ spring:
     # Scanned recursively: BM4A platform migrations (V1-V999) and CampusHire migrations in
     # db/migration/campushire (V1000+).
     locations: classpath:db/migration
+    # Platform migrations added after CampusHire's V1000+ have lower versions and must still be applied.
+    out-of-order: true
 
   jackson:
     deserialization:

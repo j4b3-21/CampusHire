@@ -1,0 +1,399 @@
+{
+  "key": "campushire",
+  "version": 1,
+  "label": "CampusHire",
+  "description": "Training & Placement CRM/ERP: students, companies, drives, applications, interviews and offers.",
+  "settings": {
+    "campushire": {
+      "allowedEmailDomains": [],
+      "policy": {"maxOffersPerStudent": 1, "dreamCtcThreshold": 1200000, "allowDreamUpgrade": true}
+    }
+  },
+  "modules": [
+    {
+      "apiKey": "department",
+      "labelSingular": "Department",
+      "labelPlural": "Departments",
+      "description": "Academic departments such as CSE and ECE.",
+      "settings": {"accessMode": "ROLES", "icon": "building-2", "titleField": "name"},
+      "fields": [
+        {"apiKey": "name", "label": "Name", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "code", "label": "Code", "type": "TEXT", "required": true, "unique": true, "filterable": true, "searchable": true, "sortable": true, "config": {"maxLength": 20}},
+        {"apiKey": "hod_name", "label": "Head of department", "type": "TEXT"},
+        {"apiKey": "coordinator_email", "label": "Coordinator e-mail", "type": "EMAIL"}
+      ],
+      "layout": {"sections": [
+        {"key": "general", "label": "Department", "columns": 2, "fields": ["name", "code", "hod_name", "coordinator_email"]}
+      ]}
+    },
+    {
+      "apiKey": "batch",
+      "labelSingular": "Batch",
+      "labelPlural": "Batches",
+      "description": "Graduating cohorts, e.g. B.Tech 2022-2026.",
+      "settings": {"accessMode": "ROLES", "icon": "calendar-range", "titleField": "name"},
+      "fields": [
+        {"apiKey": "name", "label": "Name", "type": "TEXT", "required": true, "unique": true, "searchable": true, "sortable": true, "filterable": true},
+        {"apiKey": "program", "label": "Program", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "btech", "label": "B.Tech"}, {"value": "mtech", "label": "M.Tech"}, {"value": "mba", "label": "MBA"},
+          {"value": "msc", "label": "M.Sc"}, {"value": "phd", "label": "Ph.D"}]}},
+        {"apiKey": "graduation_year", "label": "Graduation year", "type": "INTEGER", "required": true, "filterable": true, "sortable": true, "config": {"min": 2000, "max": 2100}}
+      ],
+      "layout": {"sections": [
+        {"key": "general", "label": "Batch", "columns": 3, "fields": ["name", "program", "graduation_year"]}
+      ]}
+    },
+    {
+      "apiKey": "student",
+      "labelSingular": "Student",
+      "labelPlural": "Students",
+      "description": "Placement profile of every student.",
+      "settings": {"accessMode": "ROLES", "icon": "graduation-cap", "titleField": "full_name", "subtitleField": "roll_number"},
+      "fields": [
+        {"apiKey": "roll_number", "label": "Roll number", "type": "TEXT", "required": true, "unique": true, "searchable": true, "filterable": true, "sortable": true, "config": {"maxLength": 32}},
+        {"apiKey": "full_name", "label": "Full name", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "email", "label": "E-mail", "type": "EMAIL", "required": true, "unique": true, "searchable": true, "filterable": true},
+        {"apiKey": "phone", "label": "Phone", "type": "PHONE", "sensitive": true},
+        {"apiKey": "gender", "label": "Gender", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "male", "label": "Male"}, {"value": "female", "label": "Female"}, {"value": "other", "label": "Other"}]}},
+        {"apiKey": "date_of_birth", "label": "Date of birth", "type": "DATE", "sensitive": true},
+        {"apiKey": "department", "label": "Department", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "department"}},
+        {"apiKey": "batch", "label": "Batch", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "batch"}},
+        {"apiKey": "program", "label": "Program", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "btech", "label": "B.Tech"}, {"value": "mtech", "label": "M.Tech"}, {"value": "mba", "label": "MBA"},
+          {"value": "msc", "label": "M.Sc"}, {"value": "phd", "label": "Ph.D"}]}},
+        {"apiKey": "cgpa", "label": "CGPA", "type": "DECIMAL", "filterable": true, "sortable": true, "config": {"scale": 2, "min": 0, "max": 10}},
+        {"apiKey": "active_backlogs", "label": "Active backlogs", "type": "INTEGER", "filterable": true, "sortable": true, "defaultValue": 0, "config": {"min": 0, "max": 100}},
+        {"apiKey": "total_backlogs", "label": "Total backlogs", "type": "INTEGER", "defaultValue": 0, "config": {"min": 0, "max": 100}},
+        {"apiKey": "tenth_percentage", "label": "10th %", "type": "DECIMAL", "filterable": true, "sortable": true, "config": {"scale": 2, "min": 0, "max": 100}},
+        {"apiKey": "twelfth_percentage", "label": "12th / Diploma %", "type": "DECIMAL", "filterable": true, "sortable": true, "config": {"scale": 2, "min": 0, "max": 100}},
+        {"apiKey": "skills", "label": "Skills", "type": "LONG_TEXT", "searchable": true, "config": {"maxLength": 2000}},
+        {"apiKey": "linkedin_url", "label": "LinkedIn", "type": "URL"},
+        {"apiKey": "github_url", "label": "GitHub", "type": "URL"},
+        {"apiKey": "resume", "label": "Resume", "type": "FILE_REFERENCE"},
+        {"apiKey": "photo", "label": "Photo", "type": "IMAGE_REFERENCE"},
+        {"apiKey": "placement_status", "label": "Placement status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "unplaced", "config": {"options": [
+          {"value": "unplaced", "label": "Unplaced"}, {"value": "placed", "label": "Placed"},
+          {"value": "opted_out", "label": "Opted out"}, {"value": "higher_studies", "label": "Higher studies"}]}},
+        {"apiKey": "profile_verified", "label": "Profile verified", "type": "BOOLEAN", "filterable": true, "defaultValue": false}
+      ],
+      "layout": {"sections": [
+        {"key": "identity", "label": "Identity", "tab": "Profile", "columns": 2, "fields": ["full_name", "roll_number", "email", "phone", "gender", "date_of_birth", "photo"]},
+        {"key": "academics", "label": "Academics", "tab": "Academics", "columns": 3, "fields": ["department", "batch", "program", "cgpa", "active_backlogs", "total_backlogs", "tenth_percentage", "twelfth_percentage"]},
+        {"key": "career", "label": "Career", "tab": "Profile", "columns": 2, "fields": ["skills", "resume", "linkedin_url", "github_url"]},
+        {"key": "placement", "label": "Placement", "tab": "Placement", "columns": 2, "fields": ["placement_status", "profile_verified"]}
+      ]}
+    },
+    {
+      "apiKey": "company",
+      "labelSingular": "Company",
+      "labelPlural": "Companies",
+      "description": "Recruiting companies and their relationship pipeline.",
+      "settings": {"accessMode": "ROLES", "icon": "briefcase-business", "titleField": "name", "subtitleField": "industry"},
+      "fields": [
+        {"apiKey": "name", "label": "Name", "type": "TEXT", "required": true, "unique": true, "searchable": true, "sortable": true},
+        {"apiKey": "industry", "label": "Industry", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "it_services", "label": "IT services"}, {"value": "product", "label": "Product"},
+          {"value": "finance", "label": "Finance"}, {"value": "consulting", "label": "Consulting"},
+          {"value": "core_engineering", "label": "Core engineering"}, {"value": "analytics", "label": "Analytics"},
+          {"value": "startup", "label": "Startup"}, {"value": "government", "label": "Government"}, {"value": "other", "label": "Other"}]}},
+        {"apiKey": "tier", "label": "Tier", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "config": {"options": [
+          {"value": "dream", "label": "Dream"}, {"value": "super_dream", "label": "Super dream"},
+          {"value": "regular", "label": "Regular"}, {"value": "mass", "label": "Mass recruiter"}]}},
+        {"apiKey": "pipeline_stage", "label": "Pipeline stage", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "lead", "config": {"options": [
+          {"value": "lead", "label": "Lead"}, {"value": "contacted", "label": "Contacted"},
+          {"value": "confirmed", "label": "Confirmed"}, {"value": "visited", "label": "Visited"}, {"value": "inactive", "label": "Inactive"}]}},
+        {"apiKey": "website", "label": "Website", "type": "URL"},
+        {"apiKey": "headquarters", "label": "Headquarters", "type": "TEXT", "searchable": true},
+        {"apiKey": "next_follow_up", "label": "Next follow-up", "type": "DATE", "filterable": true, "sortable": true},
+        {"apiKey": "notes", "label": "Internal notes", "type": "LONG_TEXT"}
+      ],
+      "layout": {"sections": [
+        {"key": "profile", "label": "Company", "columns": 2, "fields": ["name", "industry", "tier", "website", "headquarters"]},
+        {"key": "relationship", "label": "Relationship", "columns": 2, "fields": ["pipeline_stage", "next_follow_up", "notes"]}
+      ]}
+    },
+    {
+      "apiKey": "contact",
+      "labelSingular": "Contact",
+      "labelPlural": "Contacts",
+      "description": "HR and hiring contacts at companies.",
+      "settings": {"accessMode": "ROLES", "icon": "contact", "titleField": "full_name", "subtitleField": "designation"},
+      "fields": [
+        {"apiKey": "full_name", "label": "Full name", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company", "onTargetDelete": "NONE"}},
+        {"apiKey": "designation", "label": "Designation", "type": "TEXT"},
+        {"apiKey": "email", "label": "E-mail", "type": "EMAIL", "searchable": true, "filterable": true},
+        {"apiKey": "phone", "label": "Phone", "type": "PHONE"},
+        {"apiKey": "is_primary", "label": "Primary contact", "type": "BOOLEAN", "filterable": true, "defaultValue": false},
+        {"apiKey": "notes", "label": "Notes", "type": "LONG_TEXT"}
+      ],
+      "layout": {"sections": [
+        {"key": "contact", "label": "Contact", "columns": 2, "fields": ["full_name", "company", "designation", "email", "phone", "is_primary", "notes"]}
+      ]}
+    },
+    {
+      "apiKey": "follow_up",
+      "labelSingular": "Follow-up",
+      "labelPlural": "Follow-ups",
+      "description": "Calls, e-mails, meetings and visits to follow up with companies.",
+      "settings": {"accessMode": "ROLES", "icon": "list-checks", "titleField": "title", "subtitleField": "due_date"},
+      "fields": [
+        {"apiKey": "title", "label": "Title", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company", "onTargetDelete": "NONE"}},
+        {"apiKey": "contact", "label": "Contact", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "contact", "onTargetDelete": "NONE"}},
+        {"apiKey": "type", "label": "Type", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "call", "label": "Call"}, {"value": "email", "label": "E-mail"},
+          {"value": "meeting", "label": "Meeting"}, {"value": "visit", "label": "Visit"}]}},
+        {"apiKey": "due_date", "label": "Due date", "type": "DATE", "required": true, "filterable": true, "sortable": true},
+        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "open", "config": {"options": [
+          {"value": "open", "label": "Open"}, {"value": "done", "label": "Done"}]}},
+        {"apiKey": "notes", "label": "Notes", "type": "LONG_TEXT"}
+      ],
+      "layout": {"sections": [
+        {"key": "task", "label": "Follow-up", "columns": 2, "fields": ["title", "company", "contact", "type", "due_date", "status", "notes"]}
+      ]}
+    },
+    {
+      "apiKey": "job",
+      "labelSingular": "Job",
+      "labelPlural": "Jobs",
+      "description": "Job and internship openings offered by companies.",
+      "settings": {"accessMode": "ROLES", "icon": "file-text", "titleField": "title", "subtitleField": "company"},
+      "fields": [
+        {"apiKey": "title", "label": "Title", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
+        {"apiKey": "job_type", "label": "Type", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "full_time", "label": "Full time"}, {"value": "internship", "label": "Internship"},
+          {"value": "internship_ppo", "label": "Internship + PPO"}]}},
+        {"apiKey": "ctc", "label": "CTC (per annum)", "type": "CURRENCY", "filterable": true, "sortable": true, "config": {"currencies": ["INR"], "min": 0}},
+        {"apiKey": "stipend", "label": "Stipend (per month)", "type": "CURRENCY", "config": {"currencies": ["INR"], "min": 0}},
+        {"apiKey": "location", "label": "Location", "type": "TEXT", "searchable": true},
+        {"apiKey": "description", "label": "Description", "type": "LONG_TEXT", "config": {"maxLength": 10000}},
+        {"apiKey": "skills", "label": "Skills", "type": "LONG_TEXT", "searchable": true, "config": {"maxLength": 2000}}
+      ],
+      "layout": {"sections": [
+        {"key": "role", "label": "Role", "columns": 2, "fields": ["title", "company", "job_type", "location"]},
+        {"key": "compensation", "label": "Compensation", "columns": 2, "fields": ["ctc", "stipend"]},
+        {"key": "details", "label": "Details", "columns": 1, "fields": ["description", "skills"]}
+      ]}
+    },
+    {
+      "apiKey": "drive",
+      "labelSingular": "Drive",
+      "labelPlural": "Drives",
+      "description": "Campus recruitment drives with eligibility and a registration window.",
+      "settings": {"accessMode": "ROLES", "icon": "rocket", "titleField": "title", "subtitleField": "company"},
+      "fields": [
+        {"apiKey": "title", "label": "Title", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
+        {"apiKey": "job", "label": "Job", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "job"}},
+        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "draft", "config": {"options": [
+          {"value": "draft", "label": "Draft"}, {"value": "published", "label": "Published"},
+          {"value": "registration_closed", "label": "Registration closed"}, {"value": "in_progress", "label": "In progress"},
+          {"value": "completed", "label": "Completed"}, {"value": "cancelled", "label": "Cancelled"}]}},
+        {"apiKey": "registration_opens_at", "label": "Registration opens", "type": "DATETIME", "sortable": true, "filterable": true},
+        {"apiKey": "registration_closes_at", "label": "Registration closes", "type": "DATETIME", "required": true, "sortable": true, "filterable": true},
+        {"apiKey": "drive_date", "label": "Drive date", "type": "DATE", "sortable": true, "filterable": true},
+        {"apiKey": "mode", "label": "Mode", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "on_campus", "label": "On campus"}, {"value": "virtual", "label": "Virtual"}, {"value": "off_campus", "label": "Off campus"}]}},
+        {"apiKey": "venue", "label": "Venue / link", "type": "TEXT"},
+        {"apiKey": "eligibility", "label": "Eligibility", "type": "JSON", "config": {"maxBytes": 8192}},
+        {"apiKey": "description", "label": "Description", "type": "LONG_TEXT", "config": {"maxLength": 10000}}
+      ],
+      "layout": {"sections": [
+        {"key": "overview", "label": "Overview", "columns": 2, "fields": ["title", "company", "job", "status", "mode", "venue"]},
+        {"key": "schedule", "label": "Schedule", "columns": 3, "fields": ["registration_opens_at", "registration_closes_at", "drive_date"]},
+        {"key": "details", "label": "Details", "columns": 1, "fields": ["eligibility", "description"]}
+      ]}
+    },
+    {
+      "apiKey": "application",
+      "labelSingular": "Application",
+      "labelPlural": "Applications",
+      "description": "A student's application to a drive and its progress through the hiring pipeline.",
+      "settings": {"accessMode": "ROLES", "icon": "send", "titleField": "student", "subtitleField": "drive"},
+      "fields": [
+        {"apiKey": "drive", "label": "Drive", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "drive"}},
+        {"apiKey": "student", "label": "Student", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "student"}},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
+        {"apiKey": "department", "label": "Department", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "department"}},
+        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "required": true, "filterable": true, "sortable": true, "defaultValue": "applied", "config": {"options": [
+          {"value": "applied", "label": "Applied"}, {"value": "shortlisted", "label": "Shortlisted"},
+          {"value": "assessment", "label": "Assessment"}, {"value": "interview", "label": "Interview"},
+          {"value": "offered", "label": "Offered"}, {"value": "joined", "label": "Joined"},
+          {"value": "rejected", "label": "Rejected"}, {"value": "withdrawn", "label": "Withdrawn"}]}},
+        {"apiKey": "current_round", "label": "Current round", "type": "TEXT"},
+        {"apiKey": "remarks", "label": "Internal remarks", "type": "LONG_TEXT"}
+      ],
+      "layout": {"sections": [
+        {"key": "application", "label": "Application", "columns": 2, "fields": ["student", "drive", "company", "department"]},
+        {"key": "progress", "label": "Progress", "columns": 2, "fields": ["status", "current_round", "remarks"]}
+      ]}
+    },
+    {
+      "apiKey": "interview",
+      "labelSingular": "Interview",
+      "labelPlural": "Interviews",
+      "description": "Interview rounds scheduled for applications.",
+      "settings": {"accessMode": "ROLES", "icon": "messages-square", "titleField": "round_name", "subtitleField": "scheduled_at"},
+      "fields": [
+        {"apiKey": "application", "label": "Application", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "application"}},
+        {"apiKey": "student", "label": "Student", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "student"}},
+        {"apiKey": "drive", "label": "Drive", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "drive"}},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
+        {"apiKey": "round_name", "label": "Round", "type": "TEXT", "required": true, "searchable": true},
+        {"apiKey": "scheduled_at", "label": "Scheduled at", "type": "DATETIME", "required": true, "filterable": true, "sortable": true},
+        {"apiKey": "mode", "label": "Mode", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "in_person", "label": "In person"}, {"value": "video", "label": "Video"}, {"value": "phone", "label": "Phone"}]}},
+        {"apiKey": "location", "label": "Location / link", "type": "TEXT"},
+        {"apiKey": "result", "label": "Result", "type": "SINGLE_SELECT", "filterable": true, "defaultValue": "pending", "config": {"options": [
+          {"value": "pending", "label": "Pending"}, {"value": "passed", "label": "Passed"},
+          {"value": "failed", "label": "Failed"}, {"value": "no_show", "label": "No show"}]}},
+        {"apiKey": "feedback", "label": "Feedback", "type": "LONG_TEXT"}
+      ],
+      "layout": {"sections": [
+        {"key": "schedule", "label": "Schedule", "columns": 2, "fields": ["application", "student", "drive", "company", "round_name", "scheduled_at", "mode", "location"]},
+        {"key": "outcome", "label": "Outcome", "columns": 2, "fields": ["result", "feedback"]}
+      ]}
+    },
+    {
+      "apiKey": "offer",
+      "labelSingular": "Offer",
+      "labelPlural": "Offers",
+      "description": "Offers extended to students.",
+      "settings": {"accessMode": "ROLES", "icon": "badge-check", "titleField": "student", "subtitleField": "company"},
+      "fields": [
+        {"apiKey": "application", "label": "Application", "type": "LOOKUP", "required": true, "unique": true, "filterable": true, "config": {"targetModuleKey": "application"}},
+        {"apiKey": "student", "label": "Student", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "student"}},
+        {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
+        {"apiKey": "drive", "label": "Drive", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "drive"}},
+        {"apiKey": "department", "label": "Department", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "department"}},
+        {"apiKey": "ctc", "label": "CTC (per annum)", "type": "CURRENCY", "required": true, "filterable": true, "sortable": true, "config": {"currencies": ["INR"], "min": 0}},
+        {"apiKey": "offer_type", "label": "Type", "type": "SINGLE_SELECT", "filterable": true, "config": {"options": [
+          {"value": "full_time", "label": "Full time"}, {"value": "internship", "label": "Internship"}, {"value": "ppo", "label": "Pre-placement offer"}]}},
+        {"apiKey": "joining_date", "label": "Joining date", "type": "DATE", "sortable": true},
+        {"apiKey": "respond_by", "label": "Respond by", "type": "DATE", "sortable": true, "filterable": true},
+        {"apiKey": "offer_letter", "label": "Offer letter", "type": "FILE_REFERENCE"},
+        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "extended", "config": {"options": [
+          {"value": "extended", "label": "Extended"}, {"value": "accepted", "label": "Accepted"},
+          {"value": "declined", "label": "Declined"}, {"value": "revoked", "label": "Revoked"}]}}
+      ],
+      "layout": {"sections": [
+        {"key": "offer", "label": "Offer", "columns": 2, "fields": ["student", "company", "drive", "application", "department", "offer_type"]},
+        {"key": "terms", "label": "Terms", "columns": 2, "fields": ["ctc", "joining_date", "respond_by", "status", "offer_letter"]}
+      ]}
+    }
+  ],
+  "roles": [
+    {
+      "apiKey": "tpo",
+      "label": "Placement officer",
+      "description": "Training & Placement Officer and placement cell staff. Assign together with the ADMIN membership role.",
+      "permissions": {"modules": {
+        "department": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "batch": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "student": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "company": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "contact": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "follow_up": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "job": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "drive": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "application": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "interview": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"},
+        "offer": {"read": "ALL", "create": true, "update": "ALL", "delete": "ALL"}
+      }}
+    },
+    {
+      "apiKey": "coordinator",
+      "label": "Department coordinator",
+      "description": "Faculty or student coordinator of one department (membership attribute 'department').",
+      "permissions": {"modules": {
+        "department": {"read": "ALL"},
+        "batch": {"read": "ALL"},
+        "student": {"read": {"scope": "ATTRIBUTE", "field": "department", "attribute": "department"},
+                    "update": {"scope": "ATTRIBUTE", "field": "department", "attribute": "department"},
+                    "readOnlyFields": ["department", "placement_status"]},
+        "company": {"read": "ALL", "hiddenFields": ["notes"]},
+        "contact": {"read": "ALL"},
+        "job": {"read": "ALL"},
+        "drive": {"read": "ALL"},
+        "application": {"read": {"scope": "ATTRIBUTE", "field": "department", "attribute": "department"},
+                        "update": {"scope": "ATTRIBUTE", "field": "department", "attribute": "department"},
+                        "readOnlyFields": ["drive", "student", "company", "department"]},
+        "interview": {"read": "ALL"},
+        "offer": {"read": {"scope": "ATTRIBUTE", "field": "department", "attribute": "department"}}
+      }}
+    },
+    {
+      "apiKey": "student",
+      "label": "Student",
+      "description": "Students see their own profile, published drives and their own applications (attribute 'student').",
+      "permissions": {"modules": {
+        "department": {"read": "ALL"},
+        "batch": {"read": "ALL"},
+        "student": {"read": "OWN", "update": "OWN",
+                    "readOnlyFields": ["roll_number", "full_name", "email", "department", "batch", "program", "cgpa",
+                                       "active_backlogs", "total_backlogs", "tenth_percentage", "twelfth_percentage",
+                                       "placement_status", "profile_verified"]},
+        "company": {"read": "ALL", "hiddenFields": ["notes", "pipeline_stage", "next_follow_up"]},
+        "job": {"read": "ALL"},
+        "drive": {"read": {"scope": "ALL", "where": {"status": ["published", "registration_closed", "in_progress", "completed"]}}},
+        "application": {"read": "OWN", "hiddenFields": ["remarks"]},
+        "interview": {"read": {"scope": "ATTRIBUTE", "field": "student", "attribute": "student"}, "hiddenFields": ["feedback"]},
+        "offer": {"read": {"scope": "ATTRIBUTE", "field": "student", "attribute": "student"}}
+      }}
+    },
+    {
+      "apiKey": "recruiter",
+      "label": "Recruiter",
+      "description": "Company HR with access to their own company's drives and applicants (attribute 'company').",
+      "permissions": {"modules": {
+        "department": {"read": "ALL"},
+        "batch": {"read": "ALL"},
+        "company": {"read": {"scope": "ATTRIBUTE", "field": "$id", "attribute": "company"},
+                    "hiddenFields": ["notes", "pipeline_stage", "next_follow_up", "tier"]},
+        "contact": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"}},
+        "job": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"}},
+        "drive": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"}},
+        "application": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"},
+                        "update": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"},
+                        "hiddenFields": ["remarks"],
+                        "readOnlyFields": ["drive", "student", "company", "department"]},
+        "interview": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"},
+                      "update": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"},
+                      "readOnlyFields": ["application", "student", "drive", "company"]},
+        "offer": {"read": {"scope": "ATTRIBUTE", "field": "company", "attribute": "company"}}
+      }}
+    }
+  ],
+  "workflows": [
+    {
+      "module": "application",
+      "field": "status",
+      "definition": {
+        "initial": "applied",
+        "states": [
+          {"key": "applied", "label": "Applied", "category": "OPEN", "color": "slate"},
+          {"key": "shortlisted", "label": "Shortlisted", "category": "IN_PROGRESS", "color": "blue"},
+          {"key": "assessment", "label": "Assessment", "category": "IN_PROGRESS", "color": "violet"},
+          {"key": "interview", "label": "Interview", "category": "IN_PROGRESS", "color": "amber"},
+          {"key": "offered", "label": "Offered", "category": "WON", "color": "emerald"},
+          {"key": "joined", "label": "Joined", "category": "WON", "color": "green"},
+          {"key": "rejected", "label": "Rejected", "category": "LOST", "color": "red"},
+          {"key": "withdrawn", "label": "Withdrawn", "category": "LOST", "color": "zinc"}
+        ],
+        "transitions": [
+          {"key": "shortlist", "label": "Shortlist", "from": ["applied"], "to": "shortlisted", "roles": ["tpo", "coordinator", "recruiter"]},
+          {"key": "assess", "label": "Move to assessment", "from": ["applied", "shortlisted"], "to": "assessment", "roles": ["tpo", "coordinator", "recruiter"]},
+          {"key": "interview", "label": "Move to interview", "from": ["shortlisted", "assessment"], "to": "interview", "roles": ["tpo", "coordinator", "recruiter"]},
+          {"key": "offer", "label": "Mark offered", "from": ["shortlisted", "assessment", "interview"], "to": "offered", "roles": ["tpo", "recruiter"]},
+          {"key": "join", "label": "Mark joined", "from": ["offered"], "to": "joined", "roles": ["tpo", "coordinator"]},
+          {"key": "reject", "label": "Reject", "from": ["applied", "shortlisted", "assessment", "interview"], "to": "rejected", "roles": ["tpo", "coordinator", "recruiter"]},
+          {"key": "withdraw", "label": "Withdraw", "from": ["applied", "shortlisted"], "to": "withdrawn", "roles": ["student"]},
+          {"key": "reopen", "label": "Reopen", "from": ["rejected", "withdrawn"], "to": "applied", "roles": ["tpo"], "requireComment": true}
+        ]
+      }
+    }
+  ]
+}
