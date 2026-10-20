@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -87,7 +88,13 @@ class InvitationIntegrationTest {
                 .query(Long.class).single()).isZero();
         assertThat(jdbc.sql("SELECT count(*) FROM invitation WHERE token_hash = :hash").param("hash", sha256(token))
                 .query(Long.class).single()).isOne();
-        assertThat(output.getOut()).contains("no InvitationMailer is configured").doesNotContain(token);
+        assertThat(output.getOut()).doesNotContain(token);
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM email_outbox
+                 WHERE organization_id = CAST(:org AS uuid) AND to_address = :email AND status = 'PENDING'
+                   AND text_body LIKE :link
+                """).param("org", org).param("email", identity.email().toLowerCase(Locale.ROOT))
+                .param("link", "%/invite/" + token + "%").query(Long.class).single()).isOne();
 
         Caller invitee = api.as(identity);
         invitee.get("/api/v1/invitations/{token}", token)

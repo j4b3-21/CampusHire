@@ -32,17 +32,39 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Redis only accelerates (rate limits, schema cache, notification fan-out); callers fall back when it is slow.
+      timeout: ${REDIS_TIMEOUT:250ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
 
   modulith:
     detection-strategy: explicitly-annotated
 
 bm4a:
   app:
+    # Product name in e-mail.
+    name: ${APP_NAME:BM4A}
     # Public URL of the web application; invitation links are <base-url>/invite/<token>.
     base-url: ${APP_BASE_URL:http://localhost:3000}
   metadata:
     # One-off upgrade aid: write OpenFGA module tuples for modules created before migration V8 (idempotent).
     sync-module-tuples-on-startup: ${BM4A_SYNC_MODULE_TUPLES:false}
+    cache:
+      # Module schemas in Redis (ADR-007); PostgreSQL stays the source of truth.
+      enabled: ${METADATA_CACHE_ENABLED:true}
+  notifications:
+    email:
+      # Without SMTP_HOST nothing is sent and queued e-mails stay pending (see docs/operations/EMAIL.md).
+      enabled: ${MAIL_ENABLED:true}
+      from: ${MAIL_FROM:}
+      smtp:
+        host: ${SMTP_HOST:}
+        port: ${SMTP_PORT:587}
+        username: ${SMTP_USERNAME:}
+        password: ${SMTP_PASSWORD:}
+        starttls: ${SMTP_STARTTLS:true}
+        ssl: ${SMTP_SSL:false}
+    stream:
+      redis-enabled: ${NOTIFICATIONS_REDIS_ENABLED:true}
   security:
     jwt:
       issuer-uri: ${KEYCLOAK_ISSUER_URI:http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:2346}/realms/${KEYCLOAK_REALM:bm4a}}

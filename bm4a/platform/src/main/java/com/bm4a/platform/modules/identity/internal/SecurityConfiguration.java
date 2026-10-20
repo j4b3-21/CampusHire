@@ -31,6 +31,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import com.bm4a.platform.modules.shared.error.ProblemResponses;
 import com.bm4a.platform.modules.shared.error.Problems;
 
+import jakarta.servlet.DispatcherType;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -55,6 +56,9 @@ class SecurityConfiguration {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Completing an async request (Server-Sent Events) re-dispatches a request that was already
+                        // authorized; the bearer token filter does not run again for it.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/**").authenticated()
