@@ -24,7 +24,10 @@ import com.bm4a.platform.modules.audit.AuditLog;
 import com.bm4a.platform.modules.authorization.ModuleRelation;
 import com.bm4a.platform.modules.authorization.RelationshipTuple;
 import com.bm4a.platform.modules.authorization.RelationshipTuplesChanged;
+import com.bm4a.platform.modules.metadata.FieldConfig;
+import com.bm4a.platform.modules.metadata.FieldConfig.SelectOption;
 import com.bm4a.platform.modules.metadata.FieldStatus;
+import com.bm4a.platform.modules.metadata.FieldType;
 import com.bm4a.platform.modules.metadata.ModuleAccessMode;
 import com.bm4a.platform.modules.metadata.internal.FieldDefinitionValidator.FieldDraft;
 import com.bm4a.platform.modules.metadata.internal.VersionRow;
@@ -202,8 +205,9 @@ public class MetadataService {
         return view(updated);
     }
 
+    /** {@code expectedVersion} {@code null} skips the version check (trusted callers). */
     @Transactional
-    public ModuleView updateLayout(MetadataScope scope, UUID actor, String apiKey, long expectedVersion,
+    public ModuleView updateLayout(MetadataScope scope, UUID actor, String apiKey, Long expectedVersion,
             JsonNode layout) {
         ModuleRow current = lockOwned(scope, apiKey, expectedVersion);
         ObjectNode canonical = layoutValidator.validate(layout, repository.findFields(current.id()));
@@ -262,6 +266,46 @@ public class MetadataService {
             long expectedVersion, FieldInput in) {
         ModuleRow module = lockOwned(scope, moduleKey, null);
         FieldRow current = fieldForWrite(module, fieldKey, expectedVersion);
+        return applyFieldUpdate(scope, actor, module, current, in);
+    }
+
+    /**
+     * Appends select options whose values the field does not have yet; existing options are left untouched. Returns
+     * the added values.
+     */
+    @Transactional
+    public List<String> appendOptions(MetadataScope scope, UUID actor, String moduleKey, String fieldKey,
+            List<SelectOption> options) {
+        ModuleRow module = lockOwned(scope, moduleKey, null);
+        FieldRow current = repository.findField(module.id(), fieldKey).orElseThrow(() -> ApiException.notFound("Field"));
+        if (current.type() != FieldType.SINGLE_SELECT && current.type() != FieldType.MULTI_SELECT) {
+            throw ApiException.validation("config.options", "unsupported", "field '" + fieldKey
+                    + "' is not a select field");
+        }
+        FieldConfig config = current.config();
+        Set<String> present = new HashSet<>();
+        config.optionsOrEmpty().forEach(option -> present.add(option.value()));
+        List<SelectOption> merged = new ArrayList<>(config.optionsOrEmpty());
+        List<String> added = new ArrayList<>();
+        for (SelectOption option : options) {
+            if (option != null && option.value() != null && present.add(option.value())) {
+                merged.add(option);
+                added.add(option.value());
+            }
+        }
+        if (added.isEmpty()) {
+            return List.of();
+        }
+        FieldConfig next = new FieldConfig(config.minLength(), config.maxLength(), config.min(), config.max(),
+                config.scale(), merged, config.maxSelections(), config.currencies(), config.maxBytes(),
+                config.targetModuleKey(), config.onTargetDelete());
+        applyFieldUpdate(scope, actor, module, current, new FieldInput(null, null, null, null, null, null, null, null,
+                null, null, null, null, json.mapper().valueToTree(next), null));
+        return List.copyOf(added);
+    }
+
+    private FieldRow applyFieldUpdate(MetadataScope scope, UUID actor, ModuleRow module, FieldRow current,
+            FieldInput in) {
         FieldDraft draft = fieldValidator.validateUpdate(current, in, selfOrScope(scope, module));
         FieldRow updated = new FieldRow(current.id(), current.moduleId(), current.apiKey(), draft.label(),
                 draft.description(), draft.type(), current.status(), draft.required(), current.unique(),
