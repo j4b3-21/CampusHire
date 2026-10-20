@@ -8,6 +8,7 @@ import { OrgProvider, useOrg } from "@/components/app/org-context";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { CommandPalette } from "@/components/layout/command-palette";
+import { NotificationStream } from "@/components/notifications/notification-stream";
 import { ErrorState } from "@/components/common/error-state";
 import { LoadingScreen } from "@/components/common/loading-screen";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette />
+      <NotificationStream />
     </div>
   );
 }

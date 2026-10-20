@@ -48,6 +48,14 @@
   --sidebar-active: #f0f0f2;
   --overlay: rgb(9 9 11 / 0.4);
   --shadow-color: 240 6% 10%;
+  --chart-1: #5b5bd6;
+  --chart-2: #0ea5e9;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #e11d74;
+  --chart-muted: #d4d4d8;
+  --chart-grid: #ececef;
+  --chart-axis: #a1a1aa;
 }
 
 .dark {
@@ -90,6 +98,14 @@
   --sidebar-active: #18181d;
   --overlay: rgb(0 0 0 / 0.6);
   --shadow-color: 0 0% 0%;
+  --chart-1: #8b87f0;
+  --chart-2: #38bdf8;
+  --chart-3: #34d399;
+  --chart-4: #fbbf24;
+  --chart-5: #f472b6;
+  --chart-muted: #3f3f46;
+  --chart-grid: #232329;
+  --chart-axis: #71717a;
 }
 
 @theme inline {

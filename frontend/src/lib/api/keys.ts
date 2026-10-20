@@ -57,4 +57,23 @@ export const queryKeys = {
     ["orgs", orgId, "records", moduleKey, "transitions", id] as const,
   boardColumn: (orgId: string, moduleKey: string, state: string, params: RecordQueryParams) =>
     ["orgs", orgId, "records", moduleKey, "list", "board", state, params] as const,
+  notifications: () => ["notifications"] as const,
+  notificationList: (unreadOnly: boolean) => ["notifications", "list", unreadOnly] as const,
+  unreadCount: () => ["notifications", "unread-count"] as const,
+  onboarding: () => ["campushire-onboarding"] as const,
+  campus: (orgId: string) => ["orgs", orgId, "campushire"] as const,
+  campusMe: (orgId: string) => ["orgs", orgId, "campushire", "me"] as const,
+  dashboard: (orgId: string) => ["orgs", orgId, "campushire", "dashboard"] as const,
+  eligibilityPreview: (orgId: string, driveId: string, version: number) =>
+    ["orgs", orgId, "campushire", "eligibility", driveId, version] as const,
+  studentDrives: (orgId: string, filter: string, page: number) =>
+    ["orgs", orgId, "campushire", "student-drives", filter, page] as const,
+  applicants: (orgId: string, driveId: string) => ["orgs", orgId, "campushire", "applicants", driveId] as const,
+  applicantList: (orgId: string, driveId: string, params: object) =>
+    ["orgs", orgId, "campushire", "applicants", driveId, params] as const,
+  analytics: (orgId: string) => ["orgs", orgId, "campushire", "analytics"] as const,
+  analyticsPart: (orgId: string, part: string, params: object) =>
+    ["orgs", orgId, "campushire", "analytics", part, params] as const,
+  imports: (orgId: string, moduleKey: string) => ["orgs", orgId, "imports", moduleKey] as const,
+  importJob: (orgId: string, moduleKey: string, jobId: string) => ["orgs", orgId, "imports", moduleKey, "job", jobId] as const,
 };

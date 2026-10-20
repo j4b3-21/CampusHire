@@ -29,11 +29,22 @@ interface Crumb {
   href?: string;
 }
 
+const PORTAL_LABELS: [string, string][] = [
+  ["/analytics", "Analytics"],
+  ["/notifications", "Notifications"],
+  ["/student/drives", "Drives"],
+  ["/student/applications", "My applications"],
+  ["/student/offers", "Offers"],
+  ["/student/profile", "Profile"],
+  ["/recruiter/applicants", "Applicants"],
+];
+
 function useCrumbs(): Crumb[] {
   const pathname = usePathname();
   const params = useParams<{ orgId: string; moduleKey?: string; recordId?: string; roleKey?: string }>();
-  const { orgId, organization, moduleByKey } = useOrg();
+  const { orgId, organization, moduleByKey, persona } = useOrg();
   const adminMatch = pathname.match(/\/admin\/([a-z-]+)(?:\/([^/]+))?/);
+  const portalLabel = PORTAL_LABELS.find(([suffix]) => pathname.endsWith(suffix))?.[1];
   const definition = params.moduleKey ? moduleByKey(params.moduleKey) : undefined;
   const record = useRecord(orgId, adminMatch ? undefined : params.moduleKey, params.recordId, { silent: true });
 
@@ -61,10 +72,12 @@ function useCrumbs(): Crumb[] {
       });
       if (pathname.endsWith("/edit")) crumbs.push({ label: "Edit" });
     }
+  } else if (portalLabel) {
+    crumbs.push({ label: portalLabel });
   } else if (pathname.endsWith("/profile")) {
     crumbs.push({ label: "Profile" });
   } else {
-    crumbs.push({ label: "Dashboard" });
+    crumbs.push({ label: persona === "student" || persona === "recruiter" ? "Home" : "Dashboard" });
   }
   return crumbs;
 }

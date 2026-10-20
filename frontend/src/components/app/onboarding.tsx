@@ -7,10 +7,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { ArrowLeft, Briefcase, GraduationCap, LogOut } from "lucide-react";
+import { ArrowLeft, ArrowRight, Briefcase, CheckCircle2, GraduationCap, LogOut, MailQuestion } from "lucide-react";
 
 import { DomainsInput } from "@/components/common/domains-input";
 import { BrandWordmark } from "@/components/common/brand";
+import { LoadingScreen } from "@/components/common/loading-screen";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks/use-auth";
-import { ApiError, useCreateOrganization, useOrganizations } from "@/lib/api";
+import {
+  ApiError,
+  errorMessage,
+  useCampusOnboarding,
+  useClaimStudentRecord,
+  useCreateOrganization,
+  useOrganizations,
+} from "@/lib/api";
+import type { OnboardingOrganization } from "@/types/campushire";
 
 const schema = z.object({
   name: z.string().trim().min(2, "Enter at least 2 characters").max(200, "Use at most 200 characters"),
@@ -155,6 +164,101 @@ function JoinGuidance() {
   );
 }
 
+function StudentInstituteCard({ institute, domain }: { institute: OnboardingOrganization; domain: string | null }) {
+  const router = useRouter();
+  const claim = useClaimStudentRecord();
+  const [error, setError] = React.useState<string | null>(null);
+
+  const join = async () => {
+    setError(null);
+    try {
+      const result = await claim.mutateAsync(institute.organizationId);
+      toast.success(`Welcome to ${institute.name}`, {
+        description: result.alreadyLinked ? "Your student profile was already linked." : "Your student profile is linked to this account.",
+      });
+      router.replace(`/app/${result.organizationId}`);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === "already_member") {
+        router.replace(`/app/${institute.organizationId}`);
+        return;
+      }
+      setError(errorMessage(cause));
+    }
+  };
+
+  if (institute.member || institute.linked) {
+    return (
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-center">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-success-soft text-success-soft-foreground">
+          <CheckCircle2 className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">You&apos;re already part of {institute.name}</p>
+          <p className="text-[13px] text-muted-foreground">Open it to see drives and your applications.</p>
+        </div>
+        <Button asChild>
+          <Link href={`/app/${institute.organizationId}`}>
+            Open {institute.name} <ArrowRight />
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!institute.studentRecordFound) {
+    return (
+      <div role="status" className="flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-soft p-5 text-warning-soft-foreground sm:flex-row sm:items-start">
+        <MailQuestion className="size-5 shrink-0" />
+        <div className="min-w-0 text-[13px]">
+          <p className="text-sm font-semibold">{institute.name} hasn&apos;t added you yet</p>
+          <p className="mt-1 leading-relaxed opacity-90">
+            Your email domain{domain ? ` (${domain})` : ""} belongs to {institute.name}, but there&apos;s no student record with your email address. Contact
+            your placement cell and ask them to add you with this email; then sign in again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section aria-labelledby={`join-${institute.organizationId}`} className="flex flex-col gap-5 rounded-xl border border-primary/25 bg-card p-6 shadow-xs sm:p-7">
+      <div className="flex items-start gap-4">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
+          {institute.name.charAt(0).toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <h2 id={`join-${institute.organizationId}`} className="text-lg font-semibold tracking-[-0.02em]">
+            Join {institute.name} as a student
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+            Your placement cell has a student record with your email address. Joining links it to this account so you can see drives you&apos;re eligible
+            for, apply, and track offers.
+          </p>
+        </div>
+      </div>
+      <ul className="grid gap-1.5 text-[13px] sm:grid-cols-3">
+        {["See eligible drives", "Apply in one click", "Track every stage"].map((item) => (
+          <li key={item} className="flex items-center gap-2">
+            <CheckCircle2 className="size-3.5 text-primary" /> {item}
+          </li>
+        ))}
+      </ul>
+      {error ? (
+        <p role="alert" className="rounded-md bg-destructive-soft px-3 py-2 text-[13px] text-destructive-soft-foreground">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="lg" onClick={() => void join()} disabled={claim.isPending}>
+          {claim.isPending ? <Spinner className="text-primary-foreground" /> : <GraduationCap />}
+          Join as a student
+        </Button>
+        <span className="text-xs text-muted-foreground">Your academic details stay managed by the placement cell.</span>
+      </div>
+    </section>
+  );
+}
+
 export function Onboarding() {
   const { profile } = useAuth();
   const orgs = useOrganizations();
@@ -162,6 +266,48 @@ export function Onboarding() {
   const hasOrgs = (orgs.data?.length ?? 0) > 0;
   const creatingAnother = hasOrgs && searchParams.get("create") === "1";
   const firstName = profile?.name?.split(" ")[0];
+  const onboarding = useCampusOnboarding({ enabled: !creatingAnother });
+  const institutes = onboarding.data?.organizations ?? [];
+  const [showCreate, setShowCreate] = React.useState(false);
+  const studentFlow = !creatingAnother && institutes.length > 0;
+
+  if (!creatingAnother && onboarding.isLoading) return <LoadingScreen label="Looking up your institute…" />;
+  if (studentFlow) {
+    return (
+      <div className="flex min-h-dvh flex-col bg-surface">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+          <BrandWordmark />
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <UserMenu />
+          </div>
+        </header>
+        <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-12 sm:px-6 sm:py-16">
+          <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em] text-balance">Welcome{firstName ? `, ${firstName}` : ""}</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
+            We found {institutes.length === 1 ? "your institute" : "institutes"} for {onboarding.data?.email ?? profile?.email}.
+          </p>
+          <div className="mt-8 flex flex-col gap-4">
+            {institutes.map((institute) => (
+              <StudentInstituteCard key={institute.organizationId} institute={institute} domain={onboarding.data?.domain ?? null} />
+            ))}
+          </div>
+          <div className="mt-10 border-t border-border pt-6">
+            {showCreate ? (
+              <CreateInstituteForm />
+            ) : (
+              <p className="text-[13px] text-muted-foreground">
+                Setting up placements for a new institute instead?{" "}
+                <button type="button" className="focus-ring rounded-sm font-medium text-primary hover:underline" onClick={() => setShowCreate(true)}>
+                  Create an institute
+                </button>
+              </p>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface">

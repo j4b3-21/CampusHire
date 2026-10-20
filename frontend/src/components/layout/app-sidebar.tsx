@@ -11,7 +11,16 @@ import { Kbd } from "@/components/ui/kbd";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { ADMIN_NAV, DASHBOARD_NAV, modulePath, orgPath } from "@/lib/navigation";
+import {
+  ADMIN_NAV,
+  ANALYTICS_NAV,
+  DASHBOARD_NAV,
+  STUDENT_NAV,
+  modulePath,
+  orgPath,
+  recruiterNav,
+  type PortalNavItem,
+} from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui-store";
 
@@ -67,13 +76,62 @@ function NavSection({ label, collapsed, children }: { label: string; collapsed?:
   );
 }
 
+function NavSkeleton({ collapsed }: { collapsed?: boolean }) {
+  return (
+    <div className="flex flex-col gap-2 px-2 pt-5" aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <Skeleton key={i} className={cn("h-4", collapsed ? "w-4" : i % 3 === 0 ? "w-16" : "w-28")} />
+      ))}
+    </div>
+  );
+}
+
+/** Fixed portal navigation for students and recruiters (no CRM, no admin). */
+function PortalNav({ items, collapsed, onNavigate }: { items: PortalNavItem[]; collapsed?: boolean; onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const { orgId } = useOrg();
+  return (
+    <nav aria-label="Main" className="flex flex-col gap-px px-2 pb-4">
+      {items.map((item) => {
+        const href = orgPath(orgId, item.path);
+        const active = item.exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+        return (
+          <NavLink
+            key={item.key}
+            href={href}
+            label={item.label}
+            icon={item.icon}
+            active={active}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        );
+      })}
+    </nav>
+  );
+}
+
 function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { orgId, navGroups, isAdmin, loading } = useOrg();
+  const { orgId, navGroups, isAdmin, isStaff, loading, persona, attribute } = useOrg();
   const dashboardHref = orgPath(orgId);
+  const analyticsHref = orgPath(orgId, ANALYTICS_NAV.path);
+
+  if (loading) {
+    return (
+      <nav aria-label="Main" className="px-2 pb-4">
+        <NavSkeleton collapsed={collapsed} />
+      </nav>
+    );
+  }
+  if (persona === "student") return <PortalNav items={STUDENT_NAV} collapsed={collapsed} onNavigate={onNavigate} />;
+  if (persona === "recruiter") {
+    return <PortalNav items={recruiterNav(attribute("company"))} collapsed={collapsed} onNavigate={onNavigate} />;
+  }
 
   return (
     <nav aria-label="Main" className="flex flex-col gap-px px-2 pb-4">
+      {!collapsed ? <div className="px-2 pb-1 pt-1 text-[11px] font-medium text-subtle-foreground">Overview</div> : null}
       <NavLink
         href={dashboardHref}
         label={DASHBOARD_NAV.label}
@@ -82,32 +140,34 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
         collapsed={collapsed}
         onNavigate={onNavigate}
       />
-      {loading ? (
-        <div className="flex flex-col gap-2 px-2 pt-5" aria-hidden>
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className={cn("h-4", collapsed ? "w-4" : i % 3 === 0 ? "w-16" : "w-28")} />
-          ))}
-        </div>
-      ) : (
-        navGroups.map((group) => (
-          <NavSection key={group.key} label={group.label} collapsed={collapsed}>
-            {group.items.map((item) => {
-              const href = modulePath(orgId, item.moduleKey);
-              return (
-                <NavLink
-                  key={item.moduleKey}
-                  href={href}
-                  label={item.label}
-                  icon={item.icon}
-                  active={pathname === href || pathname.startsWith(`${href}/`)}
-                  collapsed={collapsed}
-                  onNavigate={onNavigate}
-                />
-              );
-            })}
-          </NavSection>
-        ))
-      )}
+      {isStaff ? (
+        <NavLink
+          href={analyticsHref}
+          label={ANALYTICS_NAV.label}
+          icon={ANALYTICS_NAV.icon}
+          active={pathname === analyticsHref}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+      ) : null}
+      {navGroups.map((group) => (
+        <NavSection key={group.key} label={group.label} collapsed={collapsed}>
+          {group.items.map((item) => {
+            const href = modulePath(orgId, item.moduleKey);
+            return (
+              <NavLink
+                key={item.moduleKey}
+                href={href}
+                label={item.label}
+                icon={item.icon}
+                active={pathname === href || pathname.startsWith(`${href}/`)}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            );
+          })}
+        </NavSection>
+      ))}
       {isAdmin ? (
         <NavSection label="Admin" collapsed={collapsed}>
           {ADMIN_NAV.map((item) => {

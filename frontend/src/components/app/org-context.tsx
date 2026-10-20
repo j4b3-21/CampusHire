@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { useModules, useMyAccess, useOrganizations } from "@/lib/api";
 import { NAV_GROUPS, moduleIcon, type ModuleNavItem } from "@/lib/navigation";
+import type { Persona } from "@/types/campushire";
 import type { ModuleDefinition } from "@/types/metadata";
 import type { ModuleCapabilities, MyAccess, Organization } from "@/types/org";
 
@@ -47,6 +48,19 @@ export interface OrgContextValue {
   moduleByKey: (moduleKey: string) => ModuleDefinition | undefined;
   readableModules: ModuleDefinition[];
   navGroups: NavGroup[];
+  /** CampusHire persona from the org role (owners/admins are `admin`). */
+  persona: Persona;
+  /** Admins, placement officers and coordinators. */
+  isStaff: boolean;
+  /** First value of a membership attribute (e.g. the recruiter's `company`). */
+  attribute: (key: string) => string | undefined;
+}
+
+const PERSONA_ROLES: readonly Persona[] = ["tpo", "coordinator", "student", "recruiter"];
+
+export function personaOf(isAdmin: boolean, roleKey: string | null | undefined): Persona {
+  if (isAdmin) return "admin";
+  return PERSONA_ROLES.find((persona) => persona === roleKey) ?? "member";
 }
 
 const OrgContext = React.createContext<OrgContextValue | null>(null);
@@ -107,6 +121,14 @@ export function OrgProvider({ orgId, children }: { orgId: string; children: Reac
       });
     }
 
+    const persona = personaOf(isAdmin, accessData?.role?.key);
+    const attribute = (key: string) => {
+      const value = accessData?.attributes[key];
+      if (typeof value === "string") return value;
+      if (Array.isArray(value)) return value.find((item): item is string => typeof item === "string");
+      return undefined;
+    };
+
     return {
       orgId,
       organization,
@@ -120,6 +142,9 @@ export function OrgProvider({ orgId, children }: { orgId: string; children: Reac
       moduleByKey: (moduleKey) => modules.find((module) => module.apiKey === moduleKey),
       readableModules,
       navGroups,
+      persona,
+      isStaff: persona === "admin" || persona === "tpo" || persona === "coordinator",
+      attribute,
     };
   }, [orgId, orgs.data, orgs.isLoading, access.data, access.isLoading, modulesQuery.data, modulesQuery.isLoading]);
 

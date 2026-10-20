@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { buildUrl, request } from "@/lib/api/client";
+import { saveBlob } from "@/lib/api/download";
 import { ApiError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/keys";
 import { forceRefresh, getValidToken } from "@/lib/auth/keycloak";
@@ -104,10 +105,5 @@ export function useFileObjectUrl(orgId: string | undefined, fileId: string | und
 
 export async function downloadFile(orgId: string, fileId: string, name = "download") {
   const result = await request<Blob>(`/orgs/${orgId}/files/${fileId}`, { responseType: "blob" });
-  const objectUrl = URL.createObjectURL(result.data);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  saveBlob(result.data, name);
 }

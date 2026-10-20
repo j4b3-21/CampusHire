@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { StreamStatus } from "@/types/notifications";
+
 export type Density = "comfortable" | "compact";
 
 interface UiState {
@@ -18,6 +20,9 @@ interface UiState {
   setDensity: (density: Density) => void;
   setLastOrgId: (orgId: string | null) => void;
   setHiddenColumns: (moduleKey: string, columns: string[]) => void;
+  /** Live notification stream state (not persisted). */
+  notificationStream: StreamStatus;
+  setNotificationStream: (status: StreamStatus) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -37,6 +42,8 @@ export const useUiStore = create<UiState>()(
       setLastOrgId: (lastOrgId) => set({ lastOrgId }),
       setHiddenColumns: (moduleKey, columns) =>
         set((state) => ({ hiddenColumns: { ...state.hiddenColumns, [moduleKey]: columns } })),
+      notificationStream: "idle",
+      setNotificationStream: (notificationStream) => set({ notificationStream }),
     }),
     {
       name: "campushire.ui",

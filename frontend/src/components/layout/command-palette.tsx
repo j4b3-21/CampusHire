@@ -17,7 +17,16 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { useAuth } from "@/hooks/use-auth";
-import { ADMIN_NAV, DASHBOARD_NAV, modulePath, orgPath } from "@/lib/navigation";
+import {
+  ADMIN_NAV,
+  ANALYTICS_NAV,
+  DASHBOARD_NAV,
+  NOTIFICATIONS_NAV,
+  STUDENT_NAV,
+  modulePath,
+  orgPath,
+  recruiterNav,
+} from "@/lib/navigation";
 import { ModuleGlyph } from "@/components/common/module-glyph";
 import { useUiStore } from "@/store/ui-store";
 
@@ -26,8 +35,9 @@ export function CommandPalette() {
   const open = useUiStore((state) => state.commandOpen);
   const setOpen = useUiStore((state) => state.setCommandOpen);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
-  const { orgId, organizations, navGroups, isAdmin, capabilities } = useOrg();
-  const readableModules = navGroups.flatMap((group) => group.items.map((item) => item.module));
+  const { orgId, organizations, navGroups, isAdmin, isStaff, capabilities, persona, attribute } = useOrg();
+  const portal = persona === "student" ? STUDENT_NAV : persona === "recruiter" ? recruiterNav(attribute("company")) : null;
+  const readableModules = portal ? [] : navGroups.flatMap((group) => group.items.map((item) => item.module));
   const { setTheme } = useTheme();
   const { logout } = useAuth();
 
@@ -61,8 +71,34 @@ export function CommandPalette() {
       <CommandList>
         <CommandEmpty>Nothing matches that search.</CommandEmpty>
         <CommandGroup heading="Go to">
-          <CommandItem value="dashboard home overview" onSelect={() => run(() => router.push(orgPath(orgId)))}>
-            <DASHBOARD_NAV.icon /> Dashboard
+          {portal ? (
+            portal.map((item) => (
+              <CommandItem
+                key={item.key}
+                value={`go ${item.label}`}
+                onSelect={() => run(() => router.push(orgPath(orgId, item.path)))}
+              >
+                <item.icon /> {item.label}
+              </CommandItem>
+            ))
+          ) : (
+            <CommandItem value="dashboard home overview" onSelect={() => run(() => router.push(orgPath(orgId)))}>
+              <DASHBOARD_NAV.icon /> Dashboard
+            </CommandItem>
+          )}
+          {isStaff ? (
+            <CommandItem
+              value="analytics placement report charts"
+              onSelect={() => run(() => router.push(orgPath(orgId, ANALYTICS_NAV.path)))}
+            >
+              <ANALYTICS_NAV.icon /> {ANALYTICS_NAV.label}
+            </CommandItem>
+          ) : null}
+          <CommandItem
+            value="notifications inbox alerts"
+            onSelect={() => run(() => router.push(orgPath(orgId, NOTIFICATIONS_NAV.path)))}
+          >
+            <NOTIFICATIONS_NAV.icon /> {NOTIFICATIONS_NAV.label}
           </CommandItem>
           {readableModules.map((definition) => (
             <CommandItem

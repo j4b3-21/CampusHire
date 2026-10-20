@@ -1,6 +1,10 @@
 import {
   Award,
+  Bell,
   Boxes,
+  ChartColumn,
+  House,
+  UserRound,
   Briefcase,
   Building,
   Building2,
@@ -67,7 +71,38 @@ export const NAV_GROUPS: NavGroupConfig[] = [
 ];
 
 export const DASHBOARD_NAV = { label: "Dashboard", icon: LayoutDashboard };
+export const ANALYTICS_NAV = { label: "Analytics", icon: ChartColumn, path: "/analytics" };
+export const NOTIFICATIONS_NAV = { label: "Notifications", icon: Bell, path: "/notifications" };
 export const OTHER_MODULE_ICON = Boxes;
+
+/** A fixed portal page (student and recruiter navigation). `path` is relative to `/app/{orgId}`. */
+export interface PortalNavItem {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  path: string;
+  /** Match only the exact path (home). */
+  exact?: boolean;
+}
+
+export const STUDENT_NAV: PortalNavItem[] = [
+  { key: "home", label: "Home", icon: House, path: "", exact: true },
+  { key: "drives", label: "Drives", icon: CalendarRange, path: "/student/drives" },
+  { key: "applications", label: "My applications", icon: ClipboardList, path: "/student/applications" },
+  { key: "offers", label: "Offers", icon: Award, path: "/student/offers" },
+  { key: "profile", label: "Profile", icon: UserRound, path: "/student/profile" },
+];
+
+/** `company` is resolved to the recruiter's company record at render time. */
+export function recruiterNav(companyId: string | undefined): PortalNavItem[] {
+  return [
+    { key: "home", label: "Home", icon: House, path: "", exact: true },
+    ...(companyId ? [{ key: "company", label: "My company", icon: Building2, path: `/m/company/${companyId}` }] : []),
+    { key: "drives", label: "Drives", icon: CalendarRange, path: "/m/drive" },
+    { key: "applicants", label: "Applicants", icon: Users, path: "/recruiter/applicants" },
+    { key: "interviews", label: "Interviews", icon: MessagesSquare, path: "/m/interview" },
+  ];
+}
 
 export interface AdminNavItem {
   section: string;
@@ -132,3 +167,5 @@ export const modulePath = (orgId: string, moduleKey: string, path = "") => `/app
 export const recordPath = (orgId: string, moduleKey: string, recordId: string, path = "") =>
   `/app/${orgId}/m/${moduleKey}/${recordId}${path}`;
 export const adminPath = (orgId: string, section: string, path = "") => `/app/${orgId}/admin/${section}${path}`;
+export const importPath = (orgId: string, moduleKey?: string) =>
+  `/app/${orgId}/admin/import${moduleKey ? `?module=${encodeURIComponent(moduleKey)}` : ""}`;

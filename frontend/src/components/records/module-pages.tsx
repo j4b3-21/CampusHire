@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Download, SquareKanban, List, Lock, Plus, SearchX } from "lucide-react";
+import { ArrowLeft, SquareKanban, List, Lock, Plus, SearchX, Upload } from "lucide-react";
 
 import { useOrg } from "@/components/app/org-context";
 import { PipelineBoard } from "@/components/board/pipeline-board";
@@ -11,13 +11,15 @@ import { ErrorState } from "@/components/common/error-state";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { RecordDetail } from "@/components/records/record-detail";
 import { RecordForm } from "@/components/records/record-form";
+import { ExportMenu } from "@/components/records/export-menu";
 import { RecordTable } from "@/components/records/record-table";
+import { useTableUrlState } from "@/components/records/use-table-url-state";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { ApiError, useModule, useRecord, useWorkflow } from "@/lib/api";
-import { modulePath, orgPath, recordPath } from "@/lib/navigation";
+import { importPath, modulePath, orgPath, recordPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { ModuleGlyph } from "@/components/common/module-glyph";
 import type { ModuleDefinition } from "@/types/metadata";
@@ -138,6 +140,13 @@ function ViewToggle({ orgId, moduleKey, view }: { orgId: string; moduleKey: stri
   );
 }
 
+/** Export with the list's current filters, sort and search (read from the URL like the table). */
+function ModuleExport({ orgId, moduleKey }: { orgId: string; moduleKey: string }) {
+  const { query } = useTableUrlState();
+  if (query.deleted) return null;
+  return <ExportMenu orgId={orgId} moduleKey={moduleKey} params={{ sort: query.sort, q: query.q, filters: query.filters }} />;
+}
+
 function NewRecordButton({ orgId, module, capabilities }: { orgId: string; module: ModuleDefinition; capabilities: ModuleCapabilities }) {
   if (!capabilities.create) return null;
   return (
@@ -240,6 +249,15 @@ export function ModuleListPage({ moduleKey }: { moduleKey: string }) {
               actions={
                 <>
                   <ViewToggle orgId={orgId} moduleKey={module.apiKey} view="list" />
+                  {capabilities.create ? (
+                    <SimpleTooltip label="Import from Excel or CSV">
+                      <Button variant="outline" asChild>
+                        <Link href={importPath(orgId, module.apiKey)}>
+                          <Upload /> <span className="hidden sm:inline">Import</span>
+                        </Link>
+                      </Button>
+                    </SimpleTooltip>
+                  ) : null}
                   {newButton}
                 </>
               }
@@ -250,15 +268,7 @@ export function ModuleListPage({ moduleKey }: { moduleKey: string }) {
                 module={module}
                 capabilities={capabilities}
                 emptyAction={capabilities.create ? newButton : null}
-                toolbarActions={
-                  <SimpleTooltip label="Excel and CSV export is coming with data import">
-                    <span tabIndex={0} className="focus-ring rounded-md">
-                      <Button variant="outline" size="sm" disabled aria-label="Export">
-                        <Download /> <span className="hidden sm:inline">Export</span>
-                      </Button>
-                    </span>
-                  </SimpleTooltip>
-                }
+                toolbarActions={<ModuleExport orgId={orgId} moduleKey={module.apiKey} />}
               />
             </PageBody>
           </>

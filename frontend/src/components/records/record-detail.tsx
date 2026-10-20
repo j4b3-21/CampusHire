@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Copy, MoreHorizontal, Pencil, SearchX, Trash2, Undo2 } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { FieldValue, RecordTitle } from "@/components/records/field-value";
 import { TransitionTimeline, WorkflowMoveMenu } from "@/components/workflow/record-workflow";
 import { StateBadge, WorkflowValue } from "@/components/workflow/state-badge";
 import { RecordHistory } from "@/components/records/record-history";
+import { recordExtensions } from "@/components/records/record-extensions";
 import { RelatedRecords, useRelatedSources } from "@/components/records/related-records";
 import { ErrorState } from "@/components/common/error-state";
 import { PageBody } from "@/components/layout/page-header";
@@ -119,7 +120,9 @@ function DetailFields({
 
 export function RecordDetail({ module, recordId }: { module: ModuleDefinition; recordId: string }) {
   const router = useRouter();
-  const { orgId, capabilities: capabilitiesFor } = useOrg();
+  const searchParams = useSearchParams();
+  const org = useOrg();
+  const { orgId, capabilities: capabilitiesFor } = org;
   const capabilities = capabilitiesFor(module.apiKey);
   const query = useRecord(orgId, module.apiKey, recordId, { silent: true });
   const { deleteRecords, restoreRecord, deleting, restoring } = useRecordActions(orgId, module);
@@ -172,6 +175,9 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
   const deleted = Boolean(record.deletedAt);
   const stateValue = workflow ? record.data[workflow.field] : undefined;
   const currentState = typeof stateValue === "string" ? stateByKey(workflow, stateValue) : undefined;
+  const extensions = recordExtensions(module, record, org);
+  const requestedTab = searchParams.get("tab");
+  const defaultTab = requestedTab && extensions.tabs.some((tab) => tab.key === requestedTab) ? requestedTab : "details";
 
   const copyId = async () => {
     await navigator.clipboard.writeText(record.id);
@@ -247,9 +253,14 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
 
       <PageBody className="pt-4">
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-          <Tabs defaultValue="details" className="min-w-0">
+          <Tabs defaultValue={defaultTab} className="min-w-0">
             <TabsList className="mb-5">
               <TabsTrigger value="details">Details</TabsTrigger>
+              {extensions.tabs.map((tab) => (
+                <TabsTrigger key={tab.key} value={tab.key}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
               {relatedSources.map((source) => (
                 <TabsTrigger key={source.key} value={source.key}>
                   {source.label}
@@ -260,6 +271,11 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
             <TabsContent value="details">
               <DetailFields orgId={orgId} module={module} capabilities={capabilities} record={record} workflow={workflow} />
             </TabsContent>
+            {extensions.tabs.map((tab) => (
+              <TabsContent key={tab.key} value={tab.key}>
+                {tab.content}
+              </TabsContent>
+            ))}
             {relatedSources.map((source) => (
               <TabsContent key={source.key} value={source.key}>
                 <RelatedRecords source={source} recordId={record.id} />
@@ -271,6 +287,7 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
           </Tabs>
 
           <div className="flex flex-col gap-4 lg:sticky lg:top-16">
+          {extensions.aside}
           {workflow ? (
             <section aria-labelledby="stage-history-heading" className="rounded-lg border border-border bg-card p-4">
               <h2 id="stage-history-heading" className="mb-3 text-xs font-medium text-muted-foreground">
