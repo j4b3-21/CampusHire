@@ -62,6 +62,15 @@ Expected first bottlenecks: Keycloak CPU during the login burst (password hashin
 serialization, OpenFGA checks). Hikari `pending > 0` in `monitor.sh` or Grafana means the pool, not the CPU, is
 limiting.
 
+## Partial stack check (2026-10-20, before the owner's stop)
+
+On the development laptop (Apple M3 Pro, Docker Desktop VM with 12 vCPU / 7.65 GB) the production compose file was
+started with laptop sizing (`PG_SHARED_BUFFERS=1GB`, `BACKEND_MEM_LIMIT=1g`, `HTTPS_PORT=8443`). PostgreSQL
+(3 databases, `pg_stat_statements`), OpenFGA, Redis with password, MinIO with `minio-init`, Keycloak in production mode
+under `/auth`, and `backend-1`/`backend-2` (`prod` profile, explicit OpenFGA IDs, JWKS over the internal network)
+reached `healthy`. `openfga-bootstrap.sh --write-env` created the store and model; a re-run reused the identical
+model, and `--check` passed. `nginx -t` passed on the rendered template. The smoke test, seeder and k6 were not run.
+
 ## Results
 
 No run recorded yet.
@@ -97,3 +106,10 @@ Peak resources (from `loadtest/monitor.sh --report`):
 - One generator IP: nginx's per-IP limit (`NGINX_API_IP_RATE`) must stay above the generated rate.
 - The production realm has no password-grant client. `seed.py --loadtest-client` adds `campushire-loadtest` for the
   run, and `--remove-loadtest-client` deletes it.
+
+## Open platform issue
+
+`OpenFgaConfiguration.bootstrap` (bm4a platform) lists stores and then creates one, so two replicas starting together
+can create two `campushire` stores. It also writes a new model version on every start. Production therefore runs
+with `OPENFGA_BOOTSTRAP=false` and uses `deploy/scripts/openfga-bootstrap.sh`. A platform fix would compare against
+the latest model before writing and serialize store creation (for example with a PostgreSQL advisory lock).
