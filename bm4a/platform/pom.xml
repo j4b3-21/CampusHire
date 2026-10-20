@@ -31,6 +31,8 @@
 		<spring-modulith.version>2.1.0</spring-modulith.version>
 		<openfga-sdk.version>0.11.0</openfga-sdk.version>
 		<springdoc.version>3.1.1</springdoc.version>
+		<poi.version>5.5.1</poi.version>
+		<commons-csv.version>1.14.1</commons-csv.version>
 		<awssdk.version>2.57.0</awssdk.version>
 	</properties>
 	<dependencies>
@@ -92,6 +94,16 @@
 			<groupId>dev.openfga</groupId>
 			<artifactId>openfga-sdk</artifactId>
 			<version>${openfga-sdk.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>${poi.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+			<version>${commons-csv.version}</version>
 		</dependency>
 		<!-- S3 adapter (MinIO, AWS): the JDK HTTP client only; the Netty and Apache clients are not needed. -->
 		<dependency>

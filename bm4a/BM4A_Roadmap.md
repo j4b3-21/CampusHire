@@ -27,6 +27,7 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 2 - Record engine (CRUD, soft delete, restore, versioning) | Done | JSONB, If-Match concurrency, history and revert, filters/sort/search |
 | 3 - Relationships (1:1, 1:N, N:M, lookups) | Done | Cardinality via unique indexes; restrict/detach delete behavior |
 | 3 - Files | Done | ADR-005: `files` module, S3 (MinIO) and filesystem adapters, magic-byte allow-list, downloads for uploader/admins/scoped readers of referencing records, file references validated on record writes |
+| 3 - Bulk import / export (Excel, CSV) | Done | ADR-005: `dataexchange` module, templates, previews with suggested mapping, async jobs (SKIP LOCKED workers, 500-row batches, dry run, UPSERT, lookups by code, error reports), scoped XLSX/CSV exports with formula escaping |
 | 4 - Permission engine: org permissions | Done | |
 | 4 - Permission engine: org roles, module / record permissions, field security | Done | ADR-004: `access` module, OpenFGA `role`/`module` types, record scopes (OWN, ATTRIBUTE, `$id`, `where`) as SQL predicates, hidden/read-only fields, `/me/access`, `RecordOperations`, `RecordWriteGuard`, `MembershipAdministration` |
 | 4 - PostgreSQL row-level security | Deferred | Defense in depth per ADR-002 section 4 |

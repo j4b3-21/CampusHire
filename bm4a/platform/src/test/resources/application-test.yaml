@@ -8,6 +8,8 @@ bm4a:
       audience: bm4a-api
   ratelimit:
     enabled: false
+  dataexchange:
+    poll-interval: 200ms
 
 logging:
   level:
