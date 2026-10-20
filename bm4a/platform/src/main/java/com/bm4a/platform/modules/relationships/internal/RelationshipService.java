@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -80,6 +81,12 @@ public class RelationshipService implements RecordDeletionGuard {
 
     @Transactional
     public RelationshipView create(TenantContext tenant, RelationshipInput in) {
+        return create(tenant.organizationId(), tenant.userId(), in);
+    }
+
+    /** Creation on behalf of {@code actor} without a request context (trusted callers). */
+    @Transactional
+    public RelationshipView create(UUID organizationId, UUID actor, RelationshipInput in) {
         List<FieldViolation> violations = new ArrayList<>();
         if (in.apiKey() == null || !API_KEY.matcher(in.apiKey()).matches()) {
             violations.add(new FieldViolation("apiKey", "format", "apiKey must match ^[a-z][a-z0-9_]{0,62}$"));
@@ -93,25 +100,29 @@ public class RelationshipService implements RecordDeletionGuard {
         if (in.cardinality() == null) {
             violations.add(new FieldViolation("cardinality", "required", "cardinality is required"));
         }
-        ModuleSchema source = activeModule(tenant, in.sourceModule(), "sourceModule", violations);
-        ModuleSchema target = activeModule(tenant, in.targetModule(), "targetModule", violations);
+        ModuleSchema source = activeModule(organizationId, in.sourceModule(), "sourceModule", violations);
+        ModuleSchema target = activeModule(organizationId, in.targetModule(), "targetModule", violations);
         if (!violations.isEmpty()) {
             throw ApiException.validation(violations);
         }
         Instant now = SqlValues.now(clock);
-        RelationshipRow row = new RelationshipRow(UUID.randomUUID(), tenant.organizationId(), in.apiKey(),
+        RelationshipRow row = new RelationshipRow(UUID.randomUUID(), organizationId, in.apiKey(),
                 in.label().strip(), in.inverseLabel(), source.id(), target.id(), in.cardinality(),
-                in.onDelete() == null ? OnDelete.RESTRICT : in.onDelete(), "ACTIVE", 1, now, tenant.userId(), now,
-                tenant.userId());
+                in.onDelete() == null ? OnDelete.RESTRICT : in.onDelete(), "ACTIVE", 1, now, actor, now, actor);
         try {
             repository.insert(row);
         } catch (DuplicateKeyException ex) {
             throw ApiException.conflict("relationship_exists", "A relationship '" + in.apiKey() + "' already exists");
         }
-        audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "relationship.created", "relationship",
-                row.id()).with("apiKey", row.apiKey()).with("cardinality", row.cardinality().name())
+        audit.record(AuditEntry.of(organizationId, actor, "relationship.created", "relationship", row.id())
+                .with("apiKey", row.apiKey()).with("cardinality", row.cardinality().name())
                 .with("source", source.apiKey()).with("target", target.apiKey()));
         return new RelationshipView(row, source.apiKey(), target.apiKey());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<RelationshipView> find(UUID organizationId, String apiKey) {
+        return repository.find(organizationId, apiKey, false).map(row -> view(organizationId, row));
     }
 
     @Transactional(readOnly = true)
@@ -271,9 +282,9 @@ public class RelationshipService implements RecordDeletionGuard {
                 .orElseThrow(() -> ApiException.notFound("Relationship"));
     }
 
-    private ModuleSchema activeModule(TenantContext tenant, String key, String field, List<FieldViolation> violations) {
+    private ModuleSchema activeModule(UUID organizationId, String key, String field, List<FieldViolation> violations) {
         ModuleSchema module = key == null ? null
-                : schemas.find(tenant.organizationId(), key).filter(ModuleSchema::active).orElse(null);
+                : schemas.find(organizationId, key).filter(ModuleSchema::active).orElse(null);
         if (module == null) {
             violations.add(new FieldViolation(field, "unknown_module", "no active module with this apiKey"));
         }
@@ -281,10 +292,12 @@ public class RelationshipService implements RecordDeletionGuard {
     }
 
     private RelationshipView view(TenantContext tenant, RelationshipRow row) {
-        String source = schemas.findById(tenant.organizationId(), row.sourceModuleId()).map(ModuleSchema::apiKey)
-                .orElse(null);
-        String target = schemas.findById(tenant.organizationId(), row.targetModuleId()).map(ModuleSchema::apiKey)
-                .orElse(null);
+        return view(tenant.organizationId(), row);
+    }
+
+    private RelationshipView view(UUID organizationId, RelationshipRow row) {
+        String source = schemas.findById(organizationId, row.sourceModuleId()).map(ModuleSchema::apiKey).orElse(null);
+        String target = schemas.findById(organizationId, row.targetModuleId()).map(ModuleSchema::apiKey).orElse(null);
         return new RelationshipView(row, source, target);
     }
 }

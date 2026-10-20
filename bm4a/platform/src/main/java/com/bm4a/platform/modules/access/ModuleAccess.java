@@ -1,5 +1,6 @@
 package com.bm4a.platform.modules.access;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import com.bm4a.platform.modules.tenancy.TenantContext;
@@ -24,6 +25,13 @@ public interface ModuleAccess {
 
     /** For a further module within an operation that already holds a verified context (membership is re-read). */
     ModuleGrant require(TenantContext tenant, String moduleKey, RecordAction action);
+
+    /**
+     * Like {@link #require(TenantContext, String, RecordAction)}, but an action the member may not perform yields
+     * an empty result instead of 403 (and no access-denied audit event). For capability probes such as "which
+     * workflow transitions may I perform"; membership and module failures still throw.
+     */
+    Optional<ModuleGrant> find(TenantContext tenant, String moduleKey, RecordAction action);
 
     /** The caller's capabilities in the organization, computed from the same role documents without OpenFGA calls. */
     AccessSummary describe(CurrentUser user, UUID organizationId);

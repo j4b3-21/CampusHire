@@ -189,6 +189,130 @@ email_not_verified` / `invitation_email_mismatch`; reused `409 invitation_used`;
 `http://localhost:3000`). Mail is sent after commit by the application's `InvitationMailer` bean; without one the
 platform only logs that an invitation was created (never the link).
 
+## Workflows
+
+Design: [ADR-007](../architecture/ADR-007-workflow-notifications-and-caching.md). A workflow is a state machine on one
+`SINGLE_SELECT` field of a module (one per module and organization).
+
+| Method and path | Permission |
+|-----------------|------------|
+| `GET /orgs/{orgId}/modules/{moduleKey}/workflow` | member |
+| `PUT .../workflow` `{field, definition}` (no If-Match: create, 201; If-Match: replace), `DELETE .../workflow` (If-Match) | METADATA_MANAGE |
+| `GET .../records/{id}/transitions[?page=&size=]` (history, newest first) | module READ (scope applies) |
+| `GET .../records/{id}/transitions/available` | module READ (scope applies) |
+| `POST .../records/{id}/transitions` `{to, comment?}` (If-Match) | module UPDATE (scope and field policy apply) |
+| `POST /orgs/{orgId}/modules/{moduleKey}/transitions/bulk` `{recordIds (1-500), to, comment?}` | module UPDATE (scope applies per record) |
+
+Definition (the `GET`/`PUT` response wraps it as
+`{id, module, field, version, definition, createdAt, createdBy, updatedAt, updatedBy}`, ETag = `version`):
+
+```json
+{"initial": "applied",
+ "states": [{"key": "applied", "label": "Applied", "category": "OPEN", "color": "slate"},
+            {"key": "offered", "label": "Offered", "category": "WON", "color": "emerald"}],
+ "transitions": [{"key": "offer", "label": "Mark offered", "from": ["applied"], "to": "offered",
+                  "roles": ["tpo", "recruiter"], "requireComment": false}]}
+```
+
+- `category`: `OPEN | IN_PROGRESS | WON | LOST`; `color` is optional (`^[A-Za-z0-9#-]{1,32}$`).
+- Validation (`400 validation_failed`, paths like `definition.transitions[2].from`): the field is an active, writable
+  `SINGLE_SELECT` field whose **default value is the initial state**; every state is an active option of the field;
+  state and transition keys are unique; transitions reference known states and never lead to one of their own `from`
+  states; `roles` are org role keys or `["*"]` (every member); unknown properties are rejected.
+
+Enforcement applies to every write path (record API `POST`/`PUT`/`PATCH`/version restore, transitions API, imports,
+trusted application code):
+
+- new records must start in the initial state (the field default provides it);
+- changing the field requires a defined transition from the current state; members need their org role (or `*`) in
+  `roles`, organization admins and trusted code may use every defined transition (and nothing else); a record without
+  a state may only be moved to the initial state; the field cannot be cleared - otherwise
+  `409 transition_not_allowed`, whose `detail` lists the transitions available to the caller, e.g.
+  `Moving from 'review' to 'approved' is not allowed. Allowed from 'review': reject (to 'rejected').`;
+- transitions with `requireComment: true` only through `POST .../transitions` with a non-blank comment
+  (`409 comment_required` otherwise, including plain `PATCH`).
+
+Every change of the field writes exactly one history entry (the record's creation included, with `fromState: null`):
+
+```json
+{"id": "...", "recordVersion": 4, "fromState": "review", "toState": "rejected", "transitionKey": "reject",
+ "comment": "Duplicate", "actorUserId": "...", "createdAt": "2026-10-20T10:15:00Z"}
+```
+
+`POST .../records/{id}/transitions` returns `{record: {id, module, version, data, ...}, transition: {...history
+entry}}` with the record's new ETag. `GET .../transitions/available` (for buttons and boards; empty when the caller
+cannot update the record or the field):
+
+```json
+{"recordId": "...", "version": 3, "field": "stage", "currentState": "review",
+ "transitions": [{"key": "reject", "label": "Reject", "to": "rejected", "toLabel": "Rejected", "category": "LOST",
+                  "color": "red", "requireComment": false}]}
+```
+
+Bulk transitions run each record in its own transaction and always answer `200`:
+
+```json
+{"results": [{"recordId": "...", "ok": true, "version": 2},
+             {"recordId": "...", "ok": false, "error": {"code": "not_found", "message": "Record not found"}},
+             {"recordId": "...", "ok": false, "error": {"code": "transition_not_allowed", "message": "..."}}],
+ "succeeded": 1, "failed": 2}
+```
+
+Java API (`com.bm4a.platform.modules.workflow`): `Workflows.find/create/transition` for application code and the
+`WorkflowTransitioned(organizationId, moduleId, moduleKey, recordId, fromState, toState, actorUserId, comment,
+transitionKey)` event, published in the record's transaction for transitions of existing records
+(`@ApplicationModuleListener`s receive it after commit).
+
+## Packs
+
+A pack is a declarative, versioned application definition installed into an organization, e.g. CampusHire's
+`campushire-pack.json`:
+
+```json
+{"key": "campushire", "version": 1, "label": "CampusHire", "description": "...",
+ "settings": {"campushire": {"policy": {"maxOffersPerStudent": 1}}},
+ "modules": [{"apiKey": "student", "labelSingular": "Student", "labelPlural": "Students",
+              "settings": {"accessMode": "ROLES"}, "fields": [...], "layout": {"sections": [...]}}],
+ "roles": [{"apiKey": "student", "label": "Student", "description": "...", "permissions": {"modules": {...}}}],
+ "relationships": [{"apiKey": "mentors", "label": "Mentors", "sourceModule": "student", "targetModule": "contact",
+                    "cardinality": "MANY_TO_MANY", "onDelete": "DETACH"}],
+ "workflows": [{"module": "application", "field": "stage", "definition": {...}}]}
+```
+
+Modules, fields, roles and relationships have the shape of the corresponding create requests; unknown properties
+anywhere are rejected (`400 validation_failed` with paths such as `modules[3].fields[2].bogus`). Fields without a
+`position` keep the pack order.
+
+| Method and path | Permission |
+|-----------------|------------|
+| `GET /orgs/{orgId}/packs` -> `[{packKey, version, label, definitionSha256, installedAt, installedBy}]` | member |
+| `POST /orgs/{orgId}/packs/install` (body: the pack, at most 512 KiB, else `413 payload_too_large`) | METADATA_MANAGE |
+
+Installation is one transaction, serialized per organization, and purely additive: (1) missing modules without their
+lookup fields, (2) missing fields (lookups included) and missing options of existing select fields, (3) layouts of
+modules created now or still without a layout, (4) missing roles, (5) missing relationships, (6) missing workflows,
+(7) organization settings deep-merged (existing values win), (8) the installed version. Existing fields, layouts,
+role documents and workflows are never changed. Any failure rolls the whole install back; errors carry the pack path
+(`modules[2].fields[6].config.targetModuleKey`, `roles[1].permissions.modules.nope`). Installing the installed version
+again is a no-op (`UP_TO_DATE`); a lower version is `409 pack_downgrade`.
+
+```json
+{"packKey": "campushire", "version": 2, "status": "UPGRADED", "previousVersion": 1,
+ "created": {"modules": ["notice"], "fields": ["notice.title", "student.hostel", "notice.batch"],
+             "options": ["batch.program:bsc"], "layouts": ["notice"], "roles": ["alumni"], "relationships": [],
+             "workflows": [], "settings": ["campushire.policy.allowOffCampus"]},
+ "skipped": [{"type": "role", "key": "student", "reason": "exists"},
+             {"type": "workflow", "key": "application", "reason": "exists"}]}
+```
+
+`status` is `INSTALLED | UPGRADED | UP_TO_DATE`; `skipped[].reason` is `exists`, `type_differs` (a pack field whose
+existing field has another type) or `changed_without_version_bump` (same version, different document).
+
+Applications install their pack from code with `PackInstaller.install(organizationId, actorUserId, packJson)`. The
+installer builds on published, permission-free ports that other trusted code can use as well:
+`ModuleDefinitions` (metadata), `RoleDefinitions` (access), `RelationshipDefinitions` (relationships),
+`OrganizationSettings` (tenancy) and `Workflows.create` (workflow).
+
 ## Upgrading databases created before ADR-004
 
 Modules created before migration V8 have no OpenFGA module tuples. Start the platform once with

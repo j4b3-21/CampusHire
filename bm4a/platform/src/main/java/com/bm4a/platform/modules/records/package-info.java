@@ -3,7 +3,8 @@
  * stores canonical JSONB, and provides optimistic concurrency, history, soft deletion and restore. The record API is
  * authorized per module through the access module's {@code ModuleAccess}; record scopes become SQL predicates
  * ({@link RecordScopes}) and field policies filter responses and writes. Other modules read records through
- * {@link RecordReader}, write them as trusted code through {@link RecordOperations}, and can veto changes through
+ * {@link RecordReader}, write them as trusted code through {@link RecordOperations} or on behalf of a module grant
+ * holder through {@link RecordWriter}, and can veto changes through
  * {@link RecordWriteGuard} and {@link RecordDeletionGuard}.
  */
 @ApplicationModule(id = "records", displayName = "Records",

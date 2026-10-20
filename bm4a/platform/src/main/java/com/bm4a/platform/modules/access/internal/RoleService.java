@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -79,6 +80,12 @@ public class RoleService {
 
     @Transactional
     public RoleRow create(TenantContext tenant, RoleInput in) {
+        return create(tenant.organizationId(), tenant.userId(), in);
+    }
+
+    /** Creation on behalf of {@code actor} without a request context (trusted callers). */
+    @Transactional
+    public RoleRow create(UUID organizationId, UUID actor, RoleInput in) {
         List<FieldViolation> violations = new ArrayList<>();
         if (in.apiKey() == null || !API_KEY.matcher(in.apiKey()).matches()) {
             violations.add(new FieldViolation("apiKey", "format", "apiKey must match ^[a-z][a-z0-9_]{0,62}$"));
@@ -87,14 +94,14 @@ public class RoleService {
         if (!violations.isEmpty()) {
             throw ApiException.validation(violations);
         }
-        ObjectNode permissions = validator.validate(tenant.organizationId(), in.permissions());
-        if (repository.count(tenant.organizationId()) >= MAX_ROLES_PER_ORGANIZATION) {
+        ObjectNode permissions = validator.validate(organizationId, in.permissions());
+        if (repository.count(organizationId) >= MAX_ROLES_PER_ORGANIZATION) {
             throw ApiException.conflict("limit_exceeded", "At most " + MAX_ROLES_PER_ORGANIZATION + " roles");
         }
         Instant now = SqlValues.now(clock);
-        RoleRow role = new RoleRow(UUID.randomUUID(), tenant.organizationId(), in.apiKey(), in.label().strip(),
-                in.description(), permissions, 1, now, tenant.userId(), now, tenant.userId());
-        if (repository.find(tenant.organizationId(), in.apiKey(), false).isPresent()) {
+        RoleRow role = new RoleRow(UUID.randomUUID(), organizationId, in.apiKey(), in.label().strip(),
+                in.description(), permissions, 1, now, actor, now, actor);
+        if (repository.find(organizationId, in.apiKey(), false).isPresent()) {
             throw roleExists(in.apiKey());
         }
         try {
@@ -103,9 +110,14 @@ public class RoleService {
             throw roleExists(in.apiKey());
         }
         publish(RelationshipTuplesChanged.diff(Set.of(), tuples(role)));
-        audit.record(AuditEntry.of(tenant.organizationId(), tenant.userId(), "access.role.created", "role", role.id())
+        audit.record(AuditEntry.of(organizationId, actor, "access.role.created", "role", role.id())
                 .with("apiKey", role.apiKey()).with("modules", moduleKeys(permissions)));
         return role;
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<RoleRow> find(UUID organizationId, String apiKey) {
+        return repository.find(organizationId, apiKey, false);
     }
 
     /** Full replacement of label, description and permissions. */
