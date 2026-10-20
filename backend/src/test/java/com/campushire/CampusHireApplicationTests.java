@@ -20,4 +20,10 @@ class CampusHireApplicationTests {
         mvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
         mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void exposesPrometheusMetricsForTheInternalScraper() throws Exception {
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isOk());
+        mvc.perform(get("/actuator/env")).andExpect(status().isUnauthorized());
+    }
 }

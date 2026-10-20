@@ -60,6 +60,9 @@ class SecurityConfiguration {
                         // authorized; the bearer token filter does not run again for it.
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // Only exposed where management.endpoints.web.exposure includes it; the edge proxy must keep
+                        // /actuator/** off the public network.
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())

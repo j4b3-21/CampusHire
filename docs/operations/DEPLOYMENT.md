@@ -203,20 +203,19 @@ Keycloak (`:9000/metrics`) and OpenFGA (`:2112`); Grafana is provisioned with th
 "CampusHire API" dashboard (requests/s, 5xx ratio, p95 latency per route, heap, Hikari pools, GC, CPU, threads).
 
 ```bash
-# deploy/.env: GRAFANA_ADMIN_PASSWORD, and BACKEND_PROMETHEUS_PATH=health/prometheus (see the note below)
+# deploy/.env: GRAFANA_ADMIN_PASSWORD
 make prod-up MONITORING=1         # adds prometheus and grafana; make prod-down stops them too
 ```
 
 Grafana is served at `https://<domain>/grafana/` to private networks only (same rule as the Keycloak admin
-console); nginx answers `502` there while the profile is off. The API's security configuration only permits
-anonymous access below `/actuator/health`, so the monitoring profile maps the Prometheus endpoint to
-`/actuator/health/prometheus` (`BACKEND_PROMETHEUS_PATH`); nginx never exposes `/actuator`.
+console); nginx answers `502` there while the profile is off. Prometheus scrapes `/actuator/prometheus` on the
+internal network; nginx never exposes `/actuator`.
 
 | What | How |
 |------|-----|
 | Container health and resources | `make prod-ps`, `docker stats` |
 | Logs (JSON: API in ECS format, Keycloak, OpenFGA; nginx access log with request and upstream times) | `make prod-logs SERVICE=backend-1`; rotated by Docker (5 x 20 MB per container) |
-| API health and metrics (internal only) | `docker run --rm --network campushire-prod curlimages/curl -s http://backend-1:8080/actuator/health/readiness` and `.../actuator/health/prometheus` with the monitoring setting above (Hikari pool, HTTP timings, `bm4a_ratelimit_*`, `bm4a_notifications_*`) |
+| API health and metrics (internal only) | `docker run --rm --network campushire-prod curlimages/curl -s http://backend-1:8080/actuator/health/readiness` and `.../actuator/prometheus` (Hikari pool, HTTP timings, `bm4a_ratelimit_*`, `bm4a_notifications_*`) |
 | Keycloak health and metrics | `http://keycloak:9000/health/ready`, `http://keycloak:9000/metrics` (same network) |
 | Slow SQL | `docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env exec postgres psql -U campushire_admin -d campushire -c "SELECT calls, round(mean_exec_time::numeric,2) ms, query FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 15"`; statements slower than `PG_LOG_MIN_DURATION` (500 ms) are logged |
 | Rate limiting | nginx `429` in the access log (per token 50 r/s, per IP 2000 r/s); API `429` = `bm4a_ratelimit_rejected_total` |
@@ -235,7 +234,6 @@ anonymous access below `/actuator/health`, so the monitoring profile maps the Pr
 | `429` for a whole campus | Raise `NGINX_API_IP_RATE`/`NGINX_API_IP_BURST` (NAT); per-user limits stay |
 | Uploads fail with `503 file_storage_unavailable` | `minio` unhealthy or `S3_*` mismatch. `docker compose ... logs minio minio-init` |
 | Grafana `/grafana/` returns `502` | The monitoring profile is not running: `make prod-up MONITORING=1` |
-| Prometheus target `campushire-api` is down with `401` | Set `BACKEND_PROMETHEUS_PATH=health/prometheus` and recreate backend-1/2 |
 | `docker compose up --wait` times out on a small machine | First start of Keycloak and Flyway is slow. Re-run `make prod-up`; check `make prod-logs SERVICE=keycloak` |
 | E-mails not delivered | `SMTP_HOST` empty or rejected. Pending rows stay in `email_outbox`; see EMAIL.md |
 

@@ -89,8 +89,6 @@ x-backend-env: &backend-env
   MAIL_FROM: ${MAIL_FROM:-}
   BM4A_NOTIFICATIONS_EMAIL_FROM: ${MAIL_FROM:-}
 
-  # The API's security chain only permits /actuator/health/**; the monitoring profile needs health/prometheus.
-  MANAGEMENT_ENDPOINTS_WEB_PATHMAPPING_PROMETHEUS: ${BACKEND_PROMETHEUS_PATH:-prometheus}
   MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS: "true"
 
   APP_NAME: CampusHire

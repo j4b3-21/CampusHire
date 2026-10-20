@@ -35,7 +35,7 @@ students. The load-test client is a password-grant client and must not stay in a
 
 ```bash
 # 1. Production stack (deploy/.env, docs/operations/DEPLOYMENT.md); optional monitoring profile
-make prod-up MONITORING=1           # set BACKEND_PROMETHEUS_PATH=health/prometheus in deploy/.env first
+make prod-up MONITORING=1           # Prometheus + Grafana
 make prod-smoke
 
 # 2. Data: 10,000 students imported through the data-exchange API, 1,500 student accounts that claim their

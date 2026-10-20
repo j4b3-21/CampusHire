@@ -29,7 +29,7 @@
 
 ```bash
 # On the server (or staging copy), with deploy/.env configured per DEPLOYMENT.md:
-make prod-up MONITORING=1                  # BACKEND_PROMETHEUS_PATH=health/prometheus for the API metrics
+make prod-up MONITORING=1                  # Prometheus + Grafana for API, Keycloak and OpenFGA metrics
 make prod-smoke
 make seed-load                             # 10,000 students, 1,500 accounts, temporary client campushire-loadtest
 
@@ -97,6 +97,3 @@ Peak resources (from `loadtest/monitor.sh --report`):
 - One generator IP: nginx's per-IP limit (`NGINX_API_IP_RATE`) must stay above the generated rate.
 - The production realm has no password-grant client. `seed.py --loadtest-client` adds `campushire-loadtest` for the
   run, and `--remove-loadtest-client` deletes it.
-- API metrics for Prometheus need `BACKEND_PROMETHEUS_PATH=health/prometheus`: the API's security configuration only
-  permits anonymous access below `/actuator/health` (a backend change could permit `/actuator/prometheus` on the
-  internal network instead).
