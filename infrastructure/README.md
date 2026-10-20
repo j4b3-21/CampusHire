@@ -22,7 +22,7 @@ make infra-reset     # deletes ALL volumes (database, Keycloak realm, MinIO obje
 | Redis 8.2 | 6389 | AOF persistence |
 | MinIO | 9100 / 9101 | S3 API / console; `minio-init` creates private bucket `campushire-files` and the API key `S3_ACCESS_KEY` |
 | Mailpit | 8025 / 1025 | Web UI / SMTP; catches Keycloak and API email |
-| backend (profile `app`) | 8080 | `backend/Dockerfile`, build context = repo root; override with `BACKEND_HOST_PORT` |
+| backend (profile `app`) | 8090 | `backend/Dockerfile`, build context = repo root; override with `BACKEND_HOST_PORT` |
 | frontend (profile `app`) | 3000 | `frontend/Dockerfile` (Next.js standalone); override with `FRONTEND_HOST_PORT` |
 
 MinIO no longer publishes community images, so the stack uses the Pigsty-maintained builds

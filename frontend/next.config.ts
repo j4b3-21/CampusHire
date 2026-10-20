@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const apiInternalUrl = (process.env.API_INTERNAL_URL ?? "http://localhost:8080").replace(/\/$/, "");
+const apiInternalUrl = (process.env.API_INTERNAL_URL ?? "http://localhost:8090").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
   output: "standalone",

@@ -11,7 +11,7 @@ npm install
 npm run dev                  # http://localhost:3000
 ```
 
-Needs Keycloak on `:8180` (realm `campushire`, public client `campushire-web`) and the API on `:8080`. The browser only
+Needs Keycloak on `:8180` (realm `campushire`, public client `campushire-web`) and the API on `:8090`. The browser only
 calls relative `/api/v1/...`; `next.config.ts` rewrites `/api/*` to `API_INTERNAL_URL`. `npm run build` produces a
 `standalone` server (`.next/standalone/server.js`) for the Docker image.
 

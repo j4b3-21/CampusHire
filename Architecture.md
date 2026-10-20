@@ -110,7 +110,7 @@ Flyway migrations: platform `V1..V999` in `bm4a/platform/src/main/resources/db/m
 | Service | Port |
 |---------|------|
 | Web app | 3000 |
-| API | 8080 |
+| API | 8090 (container 8080) |
 | PostgreSQL | 5442 |
 | Keycloak | 8180 |
 | OpenFGA | 8280 |
