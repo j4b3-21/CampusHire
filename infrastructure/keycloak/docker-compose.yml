@@ -41,6 +41,7 @@ services:
 
     volumes:
       - ./realms:/opt/keycloak/data/import:ro
+      - ./themes/campushire:/opt/keycloak/themes/campushire:ro
 
     # The image has no curl/wget; query the management port (9000) via bash.
     healthcheck:

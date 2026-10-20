@@ -1,6 +1,7 @@
 {
   "realm": "campushire",
   "displayName": "CampusHire",
+  "loginTheme": "campushire",
   "attributes": {
     "campushire.environment": "development-only",
     "campushire.notice": "Local development realm. Contains well-known dev users and passwords. Never import into a shared or production Keycloak."
@@ -72,6 +73,8 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "/app",
       "redirectUris": ["http://localhost:3000/*"],
       "webOrigins": ["http://localhost:3000"],
       "attributes": {

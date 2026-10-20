@@ -1,0 +1,318 @@
+/*
+ * CampusHire look for Keycloak's login pages (sign in, register, forgot/update password, verify e-mail, errors).
+ * Mirrors the web app's design tokens (frontend/src/app/globals.css): zinc neutrals with one iris accent.
+ * Dark mode follows the operating system (keycloak.v2 adds .pf-v5-theme-dark to <html>).
+ */
+
+:root {
+    --ch-bg: #fafafa;
+    --ch-card: #ffffff;
+    --ch-fg: #09090b;
+    --ch-muted: #71717a;
+    --ch-border: #e4e4e7;
+    --ch-border-strong: #d4d4d8;
+    --ch-input-bg: #ffffff;
+    --ch-primary: #5b5bd6;
+    --ch-primary-hover: #5151cd;
+    --ch-ring: rgb(91 91 214 / 0.28);
+    --ch-danger: #dc2626;
+    --ch-shadow: 0 1px 2px rgb(9 9 11 / 0.04), 0 12px 32px -16px rgb(9 9 11 / 0.18);
+    --ch-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html.pf-v5-theme-dark:root {
+    --ch-bg: #09090b;
+    --ch-card: #0f0f12;
+    --ch-fg: #fafafa;
+    --ch-muted: #a1a1aa;
+    --ch-border: #232329;
+    --ch-border-strong: #2e2e35;
+    --ch-input-bg: #09090b;
+    --ch-primary: #6e6ade;
+    --ch-primary-hover: #7d79e6;
+    --ch-ring: rgb(125 121 230 / 0.35);
+    --ch-danger: #e5484d;
+    --ch-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 16px 40px -20px rgb(0 0 0 / 0.7);
+}
+
+:root,
+html.pf-v5-theme-dark:root {
+    --keycloak-card-top-color: transparent;
+    --pf-v5-global--FontFamily--text: var(--ch-font);
+    --pf-v5-global--FontFamily--heading: var(--ch-font);
+    --pf-v5-global--FontFamily--redhatfont--text: var(--ch-font);
+    --pf-v5-global--FontFamily--redhatfont--heading: var(--ch-font);
+    --pf-v5-global--Color--100: var(--ch-fg);
+    --pf-v5-global--Color--200: var(--ch-muted);
+    --pf-v5-global--BackgroundColor--100: var(--ch-card);
+    --pf-v5-global--primary-color--100: var(--ch-primary);
+    --pf-v5-global--primary-color--200: var(--ch-primary-hover);
+    --pf-v5-global--link--Color: var(--ch-primary);
+    --pf-v5-global--link--Color--hover: var(--ch-primary-hover);
+    --pf-v5-global--BorderColor--100: var(--ch-border);
+    --pf-v5-global--danger-color--100: var(--ch-danger);
+}
+
+/* Page and card */
+
+.login-pf body {
+    background: var(--ch-bg) !important;
+    color: var(--ch-fg);
+    font-family: var(--ch-font);
+    -webkit-font-smoothing: antialiased;
+}
+
+.pf-v5-c-login {
+    --pf-v5-c-login--BackgroundColor: var(--ch-bg);
+    min-height: 100dvh;
+}
+
+.pf-v5-c-login__container {
+    grid-template-columns: minmax(0, 25rem);
+    padding-inline: 1.25rem;
+}
+
+.pf-v5-c-login__main {
+    background: var(--ch-card);
+    border: 1px solid var(--ch-border);
+    border-radius: 12px;
+    box-shadow: var(--ch-shadow);
+    overflow: hidden;
+}
+
+.pf-v5-c-login__main-header {
+    border-top: 0;
+    padding-block-start: 2rem;
+}
+
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-header {
+    padding-inline: 2rem;
+}
+
+.pf-v5-c-login__main-footer-band {
+    border-color: var(--ch-border);
+    background: transparent;
+    color: var(--ch-muted);
+    font-size: 13px;
+}
+
+/* Brand */
+
+#kc-header-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-transform: none;
+    color: var(--ch-fg) !important;
+}
+
+#kc-header-wrapper::before {
+    content: "";
+    width: 28px;
+    height: 28px;
+    flex: none;
+    background: url("../img/logo.svg") no-repeat center / contain;
+}
+
+.pf-v5-c-title.pf-m-3xl,
+#kc-page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.25;
+    color: var(--ch-fg);
+}
+
+/* Forms */
+
+.pf-v5-c-form__label-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ch-fg);
+}
+
+.pf-v5-c-form-control {
+    --pf-v5-c-form-control--BackgroundColor: var(--ch-input-bg);
+    --pf-v5-c-form-control--Color: var(--ch-fg);
+    --pf-v5-c-form-control--BorderRadius: 6px;
+    --pf-v5-c-form-control--before--BorderColor: var(--ch-border-strong);
+    --pf-v5-c-form-control--before--BorderStyle: solid;
+    --pf-v5-c-form-control--before--BorderWidth: 1px;
+    --pf-v5-c-form-control--after--BorderColor: transparent;
+    --pf-v5-c-form-control--after--BorderWidth: 0;
+    --pf-v5-c-form-control--hover--after--BorderColor: transparent;
+    --pf-v5-c-form-control--focus--after--BorderColor: transparent;
+    min-height: 40px;
+    border-radius: 6px;
+    transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.pf-v5-c-form-control::before {
+    border: 1px solid var(--ch-border-strong) !important;
+    border-radius: 6px;
+}
+
+.pf-v5-c-form-control::after {
+    border: 0 !important;
+}
+
+.pf-v5-c-form-control:hover::before {
+    border-color: var(--ch-muted) !important;
+}
+
+.pf-v5-c-input-group > .pf-v5-c-input-group__item:first-child:not(:last-child) .pf-v5-c-form-control,
+.pf-v5-c-input-group > .pf-v5-c-input-group__item:first-child:not(:last-child) .pf-v5-c-form-control::before {
+    border-radius: 6px 0 0 6px;
+}
+
+.pf-v5-c-form-control:focus-within {
+    box-shadow: 0 0 0 3px var(--ch-ring);
+}
+
+.pf-v5-c-form-control:focus-within::before {
+    border-color: var(--ch-primary) !important;
+}
+
+.pf-v5-c-form-control.pf-m-error::before {
+    border-color: var(--ch-danger) !important;
+}
+
+.pf-v5-c-form-control.pf-m-readonly {
+    --pf-v5-c-form-control--m-readonly--BackgroundColor: var(--ch-bg);
+}
+
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+    --pf-v5-c-button--m-control--BackgroundColor: var(--ch-input-bg);
+    --pf-v5-c-button--m-control--Color: var(--ch-muted);
+    min-height: 40px;
+    border-radius: 0 6px 6px 0;
+}
+
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control::after {
+    border: 1px solid var(--ch-border-strong) !important;
+    border-left: 0 !important;
+    border-radius: 0 6px 6px 0;
+}
+
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control:hover {
+    color: var(--ch-fg);
+}
+
+/* Buttons */
+
+.pf-v5-c-button {
+    --pf-v5-c-button--BorderRadius: 6px;
+    --pf-v5-c-button--FontWeight: 500;
+    --pf-v5-c-button--FontSize: 14px;
+}
+
+.pf-v5-c-button.pf-m-primary {
+    --pf-v5-c-button--m-primary--BackgroundColor: var(--ch-primary);
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ch-primary-hover);
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--ch-primary-hover);
+    --pf-v5-c-button--m-primary--active--BackgroundColor: var(--ch-primary-hover);
+    --pf-v5-c-button--m-primary--Color: #ffffff;
+    min-height: 40px;
+}
+
+.pf-v5-c-button.pf-m-secondary {
+    --pf-v5-c-button--m-secondary--Color: var(--ch-fg);
+    --pf-v5-c-button--m-secondary--BackgroundColor: var(--ch-card);
+    --pf-v5-c-button--m-secondary--after--BorderColor: var(--ch-border-strong);
+    --pf-v5-c-button--m-secondary--hover--Color: var(--ch-fg);
+    --pf-v5-c-button--m-secondary--hover--BackgroundColor: var(--ch-bg);
+    --pf-v5-c-button--m-secondary--hover--after--BorderColor: var(--ch-muted);
+    --pf-v5-c-button--m-secondary--focus--Color: var(--ch-fg);
+    min-height: 40px;
+}
+
+.pf-v5-c-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ch-ring);
+}
+
+.pf-v5-c-button.pf-m-link {
+    --pf-v5-c-button--m-link--Color: var(--ch-primary);
+    --pf-v5-c-button--m-link--hover--Color: var(--ch-primary-hover);
+}
+
+a,
+.pf-v5-c-login__main-footer-band a {
+    color: var(--ch-primary);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--ch-primary-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* "Continue with Google" and other identity providers */
+
+#kc-social-providers hr,
+.pf-v5-c-login__main-footer-band hr {
+    border-color: var(--ch-border);
+}
+
+#kc-social-providers h2 {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ch-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+#kc-social-providers .pf-v5-c-button {
+    justify-content: center;
+    gap: 10px;
+}
+
+/* Alerts */
+
+.pf-v5-c-alert {
+    --pf-v5-c-alert--BoxShadow: none;
+    --pf-v5-c-alert--BackgroundColor: var(--ch-bg);
+    border: 1px solid var(--ch-border) !important;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.pf-v5-c-alert.pf-m-inline::before {
+    display: none;
+}
+
+.pf-v5-c-alert__title {
+    font-weight: 500;
+}
+
+.pf-v5-c-alert.pf-m-info .pf-v5-c-alert__title,
+.pf-v5-c-alert.pf-m-info .pf-v5-c-alert__icon {
+    color: var(--ch-primary);
+}
+
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__title,
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__icon {
+    color: var(--ch-danger);
+}
+
+.pf-v5-c-helper-text__item-text.pf-m-error,
+.kc-feedback-text {
+    font-size: 12.5px;
+}
+
+@media (max-width: 480px) {
+    .pf-v5-c-login__main {
+        border-radius: 10px;
+    }
+
+    .pf-v5-c-login__main-body,
+    .pf-v5-c-login__main-header {
+        padding-inline: 1.25rem;
+    }
+}
