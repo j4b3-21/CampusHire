@@ -1,0 +1,60 @@
+# MinIO stopped publishing community images in late 2025 (minio/minio, quay.io/minio/* are gone).
+# pgsty/minio and pgsty/mc are the Pigsty-maintained AGPL builds of the same code (drop-in compatible).
+services:
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: campushire-minio
+    restart: unless-stopped
+
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9101
+
+    # Development-only host ports: S3 API and web console.
+    ports:
+      - "127.0.0.1:9100:9000"
+      - "127.0.0.1:9101:9001"
+
+    volumes:
+      - minio-data:/data
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  # One-shot: creates the private bucket and a least-privilege access key for the API (idempotent).
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
+    container_name: campushire-minio-init
+    user: "10001:10001"
+
+    entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
+
+    environment:
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_URL: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+
+    volumes:
+      - ./init:/init:ro
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  minio-data:

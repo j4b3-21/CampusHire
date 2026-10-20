@@ -1,0 +1,25 @@
+services:
+  # Catches every outgoing email (Keycloak verification/reset mails, API notification outbox).
+  # Messages live in a temporary database and are lost when the container is recreated.
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    container_name: campushire-mailpit
+    restart: unless-stopped
+    user: "10001:10001"
+
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+    # Development-only host ports: web UI / API and SMTP.
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s

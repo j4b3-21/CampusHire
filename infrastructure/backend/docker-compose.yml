@@ -1,0 +1,89 @@
+x-backend-env: &backend-env
+  # No Spring profile: application.yaml plus the explicit values below. The `local` profile is for
+  # running on the host (localhost ports, backend/.env); `prod` requires PLATFORM_DB_URL and logs ECS JSON.
+  SERVER_PORT: "8080"
+
+  PLATFORM_DB_HOST: postgres
+  PLATFORM_DB_PORT: "5432"
+  PLATFORM_DB: ${PLATFORM_DB}
+  PLATFORM_DB_USER: ${PLATFORM_DB_USER}
+  PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD}
+  DB_POOL_SIZE: "10"
+
+  # Issuer must match the token `iss` (KC_HOSTNAME, as seen by browsers); keys are fetched in-network.
+  KEYCLOAK_ISSUER_URI: ${KC_HOSTNAME}/realms/campushire
+  KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/campushire/protocol/openid-connect/certs
+  KEYCLOAK_AUDIENCE: campushire-api
+
+  OPENFGA_API_URL: http://openfga:8080
+  OPENFGA_PRESHARED_KEY: ${OPENFGA_PRESHARED_KEY}
+  OPENFGA_STORE_NAME: campushire
+  OPENFGA_BOOTSTRAP: "true"
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+
+  FILES_STORAGE: s3
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION}
+  S3_BUCKET: ${S3_BUCKET}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+  S3_SECRET_KEY: ${S3_SECRET_KEY}
+  S3_PATH_STYLE: "true"
+
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_USERNAME: ""
+  SMTP_PASSWORD: ""
+  SMTP_STARTTLS: "false"
+  MAIL_FROM: ${MAIL_FROM}
+
+  APP_BASE_URL: ${APP_BASE_URL}
+
+services:
+  backend:
+    profiles: ["app"]
+    build:
+      # Repo root: the image builds bm4a/platform first, then backend.
+      context: ../..
+      dockerfile: backend/Dockerfile
+    image: campushire-backend:local
+    container_name: campushire-backend
+    restart: unless-stopped
+
+    environment:
+      <<: *backend-env
+
+    # Development-only host port (override BACKEND_HOST_PORT if 8080 is taken).
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080"
+
+    # The JRE image has no curl/wget; use bash /dev/tcp.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /actuator/health/readiness HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully

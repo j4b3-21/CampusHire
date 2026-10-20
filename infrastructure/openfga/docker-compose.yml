@@ -1,0 +1,48 @@
+x-openfga-datastore: &openfga-datastore
+  OPENFGA_DATASTORE_ENGINE: postgres
+  OPENFGA_DATASTORE_URI: postgres://postgres:5432/${OPENFGA_DB}?sslmode=disable
+  OPENFGA_DATASTORE_USERNAME: ${OPENFGA_DB_USER}
+  OPENFGA_DATASTORE_PASSWORD: ${OPENFGA_DB_PASSWORD}
+
+services:
+  openfga-migrate:
+    image: openfga/openfga:v1.22.0
+    container_name: campushire-openfga-migrate
+
+    command: migrate
+
+    environment:
+      <<: *openfga-datastore
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga:
+    image: openfga/openfga:v1.22.0
+    container_name: campushire-openfga
+    restart: unless-stopped
+
+    command: run
+
+    environment:
+      <<: *openfga-datastore
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: "20"
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+
+    # Development-only host port (HTTP API). gRPC (8081) is container-network only.
+    ports:
+      - "127.0.0.1:8280:8080"
+
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully

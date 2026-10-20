@@ -1,0 +1,19 @@
+# CampusHire local development stack (DEVELOPMENT ONLY).
+#
+#   make infra-up                                                                     # dependencies only
+#   docker compose -f infrastructure/docker-compose.yml --profile app up -d --build   # dependencies + backend + frontend
+#
+# All services share this project's default network and reach each other by service name
+# (postgres, keycloak, openfga, redis, minio, mailpit, backend, frontend).
+# Host ports are bound to 127.0.0.1 and exist for local development only.
+name: campushire
+
+include:
+  - ./postgres/docker-compose.yml
+  - ./keycloak/docker-compose.yml
+  - ./openfga/docker-compose.yml
+  - ./redis/docker-compose.yml
+  - ./minio/docker-compose.yml
+  - ./mailpit/docker-compose.yml
+  - ./backend/docker-compose.yml
+  - ./frontend/docker-compose.yml

@@ -1,0 +1,64 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    container_name: campushire-keycloak
+    restart: unless-stopped
+
+    # --import-realm only creates realms that do not exist yet; edits to the realm file
+    # (or GOOGLE_* values) need `make infra-reset` or a manual realm delete to take effect.
+    command:
+      - start-dev
+      - --import-realm
+
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_POOL_MAX_SIZE: "20"
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Full URL pins the token issuer to http://localhost:8180/realms/campushire for
+      # every caller; backchannel-dynamic lets containers use keycloak:8080.
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED}
+
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # Substituted into realms/campushire-realm.json at import time (${VAR:default} placeholders).
+      GOOGLE_IDP_ENABLED: ${GOOGLE_IDP_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-change-me-google-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-change-me-google-client-secret}
+      GOOGLE_HOSTED_DOMAIN: ${GOOGLE_HOSTED_DOMAIN:-iiitt.ac.in}
+
+    # Development-only host port.
+    ports:
+      - "127.0.0.1:8180:8080"
+
+    volumes:
+      - ./realms:/opt/keycloak/data/import:ro
+
+    # The image has no curl/wget; query the management port (9000) via bash.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy

@@ -1,0 +1,13 @@
+# Build context for backend/Dockerfile is the repository root: send only what the Maven reactor needs.
+*
+!mvnw
+!pom.xml
+!.mvn/
+!bm4a/platform/pom.xml
+!bm4a/platform/src/
+!backend/pom.xml
+!backend/src/
+
+**/target/
+**/.DS_Store
+.mvn/wrapper/maven-wrapper.jar
