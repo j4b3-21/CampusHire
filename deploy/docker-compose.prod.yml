@@ -1,0 +1,540 @@
+# CampusHire production stack for a single host (ADR-006). Only nginx publishes ports.
+#
+#   cp deploy/.env.example deploy/.env    # then replace every change-me value
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build --wait
+#
+# Operations guide: docs/operations/DEPLOYMENT.md
+#
+# Memory limits for the 8 vCPU / 16 GB reference host (ADR-006): postgres 6g (shared_buffers 4GB), backend-1/2 2g
+# each (heap 1.5g), keycloak 1.5g, minio 1g, redis 768m (maxmemory 512mb), frontend/openfga 512m, nginx 256m:
+# ~14.3 GB, leaving ~1.7 GB for the OS and page cache. CPU limits overlap on purpose (bursts, not reservations).
+# Connection budget: 2 x DB_POOL_SIZE 30 + Keycloak 20 + OpenFGA 20 = 100 < max_connections 200.
+name: campushire-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging: *logging
+  networks: [campushire]
+
+x-openfga-datastore: &openfga-datastore
+  OPENFGA_DATASTORE_ENGINE: postgres
+  OPENFGA_DATASTORE_URI: postgres://postgres:5432/${OPENFGA_DB:-openfga}?sslmode=disable
+  OPENFGA_DATASTORE_USERNAME: ${OPENFGA_DB_USER:-openfga}
+  OPENFGA_DATASTORE_PASSWORD: ${OPENFGA_DB_PASSWORD:?set OPENFGA_DB_PASSWORD in deploy/.env}
+
+x-backend-env: &backend-env
+  SPRING_PROFILES_ACTIVE: prod
+  SERVER_PORT: "8080"
+  # The image entrypoint already sets -XX:MaxRAMPercentage=75 (heap = 75% of BACKEND_MEM_LIMIT).
+  JAVA_TOOL_OPTIONS: ${BACKEND_JAVA_OPTS:--XX:InitialRAMPercentage=50 -XX:+UseG1GC -XX:MaxGCPauseMillis=100}
+
+  PLATFORM_DB_URL: jdbc:postgresql://postgres:5432/${PLATFORM_DB:-campushire}
+  PLATFORM_DB_USER: ${PLATFORM_DB_USER:-campushire}
+  PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD:?set PLATFORM_DB_PASSWORD in deploy/.env}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-30}
+
+  # Issuer = what browsers see (token `iss`); keys are fetched inside the network.
+  KEYCLOAK_ISSUER_URI: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN:?set CAMPUSHIRE_DOMAIN in deploy/.env}}/auth/realms/campushire
+  KEYCLOAK_JWK_SET_URI: http://keycloak:8080/auth/realms/campushire/protocol/openid-connect/certs
+  KEYCLOAK_AUDIENCE: campushire-api
+
+  OPENFGA_API_URL: http://openfga:8080
+  OPENFGA_PRESHARED_KEY: ${OPENFGA_PRESHARED_KEY:?set OPENFGA_PRESHARED_KEY in deploy/.env}
+  OPENFGA_STORE_NAME: campushire
+  OPENFGA_STORE_ID: ${OPENFGA_STORE_ID:-}
+  OPENFGA_MODEL_ID: ${OPENFGA_MODEL_ID:-}
+  OPENFGA_BOOTSTRAP: "false"
+
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  RATE_LIMIT_WRITES_PER_MINUTE: ${RATE_LIMIT_WRITES_PER_MINUTE:-300}
+
+  # The documented short names and their canonical bm4a.* forms are both set, because the CampusHire
+  # application.yaml replaces the platform's and does not map FILES_*/S3_*/SMTP_* (see DEPLOYMENT.md).
+  FILES_STORAGE: s3
+  BM4A_FILES_STORAGE: s3
+  S3_ENDPOINT: http://minio:9000
+  BM4A_FILES_S3_ENDPOINT: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  BM4A_FILES_S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-campushire-files}
+  BM4A_FILES_S3_BUCKET: ${S3_BUCKET:-campushire-files}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-campushire-api}
+  BM4A_FILES_S3_ACCESSKEY: ${S3_ACCESS_KEY:-campushire-api}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in deploy/.env}
+  BM4A_FILES_S3_SECRETKEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in deploy/.env}
+  S3_PATH_STYLE: "true"
+  BM4A_FILES_S3_PATHSTYLE: "true"
+
+  SMTP_HOST: ${SMTP_HOST:-}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+  SMTP_SSL: ${SMTP_SSL:-false}
+  BM4A_NOTIFICATIONS_EMAIL_SMTP_SSL: ${SMTP_SSL:-false}
+  MAIL_FROM: ${MAIL_FROM:-}
+  BM4A_NOTIFICATIONS_EMAIL_FROM: ${MAIL_FROM:-}
+
+  # The API's security chain only permits /actuator/health/**; the monitoring profile needs health/prometheus.
+  MANAGEMENT_ENDPOINTS_WEB_PATHMAPPING_PROMETHEUS: ${BACKEND_PROMETHEUS_PATH:-prometheus}
+  MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILESHISTOGRAM_HTTP_SERVER_REQUESTS: "true"
+
+  APP_NAME: CampusHire
+  APP_BASE_URL: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN}}
+  CAMPUSHIRE_TIME_ZONE: ${CAMPUSHIRE_TIME_ZONE:-Asia/Kolkata}
+  DATA_EXCHANGE_TIME_ZONE: ${CAMPUSHIRE_TIME_ZONE:-Asia/Kolkata}
+  API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+
+x-backend: &backend
+  <<: *defaults
+  image: campushire-backend:${IMAGE_TAG:-latest}
+  environment:
+    <<: *backend-env
+  stop_grace_period: 40s
+  deploy:
+    resources:
+      limits:
+        cpus: "${BACKEND_CPUS:-3}"
+        memory: ${BACKEND_MEM_LIMIT:-2g}
+  # The JRE image has no curl/wget; use bash /dev/tcp.
+  healthcheck:
+    test:
+      - CMD
+      - bash
+      - -c
+      - >-
+        exec 3<>/dev/tcp/127.0.0.1/8080 &&
+        printf 'GET /actuator/health/readiness HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        grep -q '"UP"' <&3
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 90s
+  depends_on:
+    postgres:
+      condition: service_healthy
+    keycloak:
+      condition: service_healthy
+    openfga:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio-init:
+      condition: service_completed_successfully
+
+services:
+  nginx:
+    <<: *defaults
+    image: nginx:stable-alpine
+    ports:
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${HTTP_BIND:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    environment:
+      CAMPUSHIRE_DOMAIN: ${CAMPUSHIRE_DOMAIN:?set CAMPUSHIRE_DOMAIN in deploy/.env}
+      NGINX_API_RATE: ${NGINX_API_RATE:-50r/s}
+      NGINX_API_BURST: ${NGINX_API_BURST:-100}
+      NGINX_API_IP_RATE: ${NGINX_API_IP_RATE:-2000r/s}
+      NGINX_API_IP_BURST: ${NGINX_API_IP_BURST:-4000}
+      NGINX_AUTH_RATE: ${NGINX_AUTH_RATE:-100r/s}
+      NGINX_AUTH_BURST: ${NGINX_AUTH_BURST:-200}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ${CERTS_DIR:-./certs}:/etc/nginx/certs:ro
+      - certbot-webroot:/var/www/certbot:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 256m
+    ulimits:
+      nofile: { soft: 65535, hard: 65535 }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend-1:
+        condition: service_healthy
+      backend-2:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  frontend:
+    <<: *defaults
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      # Inlined by `next build`. Browsers call /api through nginx; the rewrite to API_INTERNAL_URL only serves
+      # requests that reach Next.js directly (none in this topology), so one replica is a sufficient target.
+      args:
+        API_INTERNAL_URL: http://backend-1:8080
+        NEXT_PUBLIC_KEYCLOAK_URL: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN}}/auth
+        NEXT_PUBLIC_KEYCLOAK_REALM: campushire
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: campushire-web
+    image: campushire-frontend:${IMAGE_TAG:-latest}
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/',{redirect:'manual'}).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  backend-1:
+    <<: *backend
+    build:
+      # Repo root: the image builds bm4a/platform first, then backend.
+      context: ..
+      dockerfile: backend/Dockerfile
+
+  backend-2:
+    <<: *backend
+    # Same image as backend-1 (built once by `docker compose build`).
+    pull_policy: never
+
+  keycloak:
+    <<: *defaults
+    image: quay.io/keycloak/keycloak:26.3
+    # --import-realm only creates the realm when it does not exist; later edits go through the admin console.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD in deploy/.env}
+      KC_DB_POOL_MAX_SIZE: "20"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in deploy/.env}
+      KC_HOSTNAME: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN}}/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_CACHE: local
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_LOG_CONSOLE_OUTPUT: json
+      # Substituted into the realm file at first import.
+      CAMPUSHIRE_PUBLIC_URL: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN}}
+      GOOGLE_IDP_ENABLED: ${GOOGLE_IDP_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-change-me-google-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-change-me-google-client-secret}
+      GOOGLE_HOSTED_DOMAIN: ${GOOGLE_HOSTED_DOMAIN:-}
+      REALM_SMTP_HOST: ${SMTP_HOST:-}
+      REALM_SMTP_PORT: ${SMTP_PORT:-587}
+      REALM_SMTP_FROM: ${KEYCLOAK_MAIL_FROM:-no-reply@example.edu}
+      REALM_SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      REALM_SMTP_SSL: ${SMTP_SSL:-false}
+      REALM_SMTP_AUTH: ${KEYCLOAK_SMTP_AUTH:-true}
+      REALM_SMTP_USER: ${SMTP_USERNAME:-}
+      REALM_SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+      - ../infrastructure/keycloak/themes/campushire:/opt/keycloak/themes/campushire:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "${KEYCLOAK_CPUS:-2}"
+          memory: ${KEYCLOAK_MEM_LIMIT:-1536m}
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    <<: *defaults
+    image: postgres:18
+    # ADR-006 values for a 16 GB host; lower PG_* in deploy/.env on smaller machines.
+    command:
+      - postgres
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-4GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-12GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-512MB}
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=1GB
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - max_worker_processes=8
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - jit=off
+      - -c
+      - huge_pages=try
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - log_min_duration_statement=${PG_LOG_MIN_DURATION:-500ms}
+      - -c
+      - log_lock_waits=on
+      - -c
+      - log_checkpoints=on
+      - -c
+      - log_temp_files=10MB
+      - -c
+      - idle_in_transaction_session_timeout=5min
+    shm_size: ${PG_SHM_SIZE:-1g}
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-campushire_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      OPENFGA_DB: ${OPENFGA_DB:-openfga}
+      OPENFGA_DB_USER: ${OPENFGA_DB_USER:-openfga}
+      OPENFGA_DB_PASSWORD: ${OPENFGA_DB_PASSWORD}
+      PLATFORM_DB: ${PLATFORM_DB:-campushire}
+      PLATFORM_DB_USER: ${PLATFORM_DB_USER:-campushire}
+      PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEM_LIMIT:-6g}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  openfga-migrate:
+    image: openfga/openfga:v1.22.0
+    command: migrate
+    logging: *logging
+    networks: [campushire]
+    environment:
+      <<: *openfga-datastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga:
+    <<: *defaults
+    image: openfga/openfga:v1.22.0
+    command: run
+    environment:
+      <<: *openfga-datastore
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: "20"
+      OPENFGA_DATASTORE_MAX_IDLE_CONNS: "10"
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: ${OPENFGA_CHECK_CACHE_ENABLED:-false}
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+
+  # Cache, rate limits and SSE fan-out only (never a source of truth): no persistence, LRU eviction.
+  redis:
+    <<: *defaults
+    image: redis:8.2
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-512mb}
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # pgsty/minio: Pigsty-maintained AGPL builds (official MinIO community images are no longer published).
+  minio:
+    <<: *defaults
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-campushire-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in deploy/.env}
+    volumes:
+      - minio-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-10-18T00-00-00Z
+    user: "10001:10001"
+    entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
+    logging: *logging
+    networks: [campushire]
+    environment:
+      MC_CONFIG_DIR: /tmp/.mc
+      MINIO_URL: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-campushire-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-campushire-files}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-campushire-api}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - ../infrastructure/minio/init:/init:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  # ---- Optional monitoring (docker compose --profile monitoring ...); Grafana is served by nginx at /grafana/
+  # to private networks only, Prometheus stays internal.
+  prometheus:
+    <<: *defaults
+    profiles: ["monitoring"]
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  grafana:
+    <<: *defaults
+    profiles: ["monitoring"]
+    image: grafana/grafana:12.0.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deploy/.env}
+      GF_SERVER_ROOT_URL: ${CAMPUSHIRE_PUBLIC_URL:-https://${CAMPUSHIRE_DOMAIN}}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+networks:
+  campushire:
+    name: campushire-prod
+
+volumes:
+  postgres-data:
+  minio-data:
+  certbot-webroot:
+  prometheus-data:
+  grafana-data:

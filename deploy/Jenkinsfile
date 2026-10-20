@@ -2,8 +2,11 @@
 //
 // Agent requirements: Docker Engine with Compose v2, JDK 25, Node.js 22, curl, jq.
 // Credentials (Jenkins > Credentials):
-//   campushire-prod-env   Secret file with the production deploy/.env
-// The deploy stage runs on the host that serves CampusHire (label "campushire-prod").
+//   campushire-prod-env   Secret file with the production deploy/.env (including OPENFGA_STORE_ID/MODEL_ID)
+// The deploy stage runs on the host that serves CampusHire (label "campushire-prod"); BACKUP_DIR must be writable
+// by the Jenkins user there. Set SMOKE_INSECURE=1 on that agent for self-signed (LAN) certificates.
+// The compose project is fixed (campushire-prod), so Jenkins manages the same containers as a manual install; set
+// CERTS_DIR in the credential to an absolute path because the workspace is not the install directory.
 
 pipeline {
     agent { label 'campushire-build' }
@@ -47,21 +50,8 @@ pipeline {
             }
         }
 
-        stage('Images') {
-            parallel {
-                stage('Backend image') {
-                    steps {
-                        sh 'docker build -f backend/Dockerfile -t campushire-backend:${IMAGE_TAG} -t campushire-backend:latest .'
-                    }
-                }
-                stage('Frontend image') {
-                    steps {
-                        sh 'docker build -f frontend/Dockerfile -t campushire-frontend:${IMAGE_TAG} -t campushire-frontend:latest frontend'
-                    }
-                }
-            }
-        }
-
+        // Images are built on the serving host: the frontend bakes CAMPUSHIRE_PUBLIC_URL (deploy/.env) into its
+        // bundle, and the compose file runs whatever campushire-*:IMAGE_TAG exists locally.
         stage('Deploy') {
             when {
                 branch 'main'
@@ -71,10 +61,18 @@ pipeline {
                 withCredentials([file(credentialsId: 'campushire-prod-env', variable: 'PROD_ENV')]) {
                     sh '''
                         install -m 600 "$PROD_ENV" deploy/.env
+                        export IMAGE_TAG
                         docker compose -f "$COMPOSE_FILE" --env-file deploy/.env config -q
+                        docker compose -f "$COMPOSE_FILE" --env-file deploy/.env build --pull
+                        deploy/scripts/openfga-bootstrap.sh --check
                         deploy/scripts/backup.sh
-                        IMAGE_TAG="$IMAGE_TAG" docker compose -f "$COMPOSE_FILE" --env-file deploy/.env up -d --remove-orphans --wait
+                        docker compose -f "$COMPOSE_FILE" --env-file deploy/.env up -d --remove-orphans --wait
                     '''
+                }
+            }
+            post {
+                cleanup {
+                    sh 'rm -f deploy/.env'
                 }
             }
         }
@@ -85,7 +83,17 @@ pipeline {
             }
             agent { label 'campushire-prod' }
             steps {
-                sh 'deploy/scripts/smoke-test.sh'
+                withCredentials([file(credentialsId: 'campushire-prod-env', variable: 'PROD_ENV')]) {
+                    sh '''
+                        install -m 600 "$PROD_ENV" deploy/.env
+                        deploy/scripts/smoke-test.sh ${SMOKE_INSECURE:+--insecure}
+                    '''
+                }
+            }
+            post {
+                cleanup {
+                    sh 'rm -f deploy/.env'
+                }
             }
         }
     }

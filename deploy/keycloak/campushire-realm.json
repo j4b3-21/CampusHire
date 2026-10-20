@@ -1,0 +1,148 @@
+{
+  "realm": "campushire",
+  "displayName": "CampusHire",
+  "loginTheme": "campushire",
+  "attributes": {
+    "campushire.environment": "production"
+  },
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "editUsernameAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "rememberMe": false,
+  "passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "smtpServer": {
+    "host": "${REALM_SMTP_HOST:}",
+    "port": "${REALM_SMTP_PORT:587}",
+    "from": "${REALM_SMTP_FROM:no-reply@example.edu}",
+    "fromDisplayName": "CampusHire",
+    "ssl": "${REALM_SMTP_SSL:false}",
+    "starttls": "${REALM_SMTP_STARTTLS:true}",
+    "auth": "${REALM_SMTP_AUTH:true}",
+    "user": "${REALM_SMTP_USER:}",
+    "password": "${REALM_SMTP_PASSWORD:}"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "campushire-platform-admin",
+        "description": "Platform-wide administrator for global BM4A/CampusHire metadata."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "campushire-api",
+      "name": "CampusHire API",
+      "description": "Resource server / access-token audience. No login flows.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "campushire-web",
+      "name": "CampusHire Web",
+      "description": "Next.js web app login (authorization code + PKCE S256).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "rootUrl": "${CAMPUSHIRE_PUBLIC_URL}",
+      "baseUrl": "/app",
+      "redirectUris": [
+        "${CAMPUSHIRE_PUBLIC_URL}/*"
+      ],
+      "webOrigins": [
+        "${CAMPUSHIRE_PUBLIC_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${CAMPUSHIRE_PUBLIC_URL}/*"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "web-origins",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "campushire-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "campushire-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "google",
+      "displayName": "Google",
+      "providerId": "google",
+      "enabled": "${GOOGLE_IDP_ENABLED:false}",
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "linkOnly": false,
+      "hideOnLogin": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${GOOGLE_CLIENT_ID:change-me-google-client-id}",
+        "clientSecret": "${GOOGLE_CLIENT_SECRET:change-me-google-client-secret}",
+        "hostedDomain": "${GOOGLE_HOSTED_DOMAIN:}",
+        "defaultScope": "openid profile email",
+        "syncMode": "IMPORT",
+        "guiOrder": "1"
+      }
+    }
+  ],
+  "identityProviderMappers": [
+    {
+      "name": "google-email",
+      "identityProviderAlias": "google",
+      "identityProviderMapper": "google-user-attribute-mapper",
+      "config": {
+        "syncMode": "INHERIT",
+        "jsonField": "email",
+        "userAttribute": "email"
+      }
+    }
+  ]
+}

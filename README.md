@@ -10,3 +10,7 @@ workflow, live analytics and Google sign-in for students.
 - Product requirements: [docs/PRD.md](docs/PRD.md)
 
 > Work in progress: setup instructions are completed as the stack lands.
+
+## Deploy
+
+Single-host production stack and operations guide: [docs/operations/DEPLOYMENT.md](docs/operations/DEPLOYMENT.md).

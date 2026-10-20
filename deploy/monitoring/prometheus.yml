@@ -1,0 +1,27 @@
+# Scrapes the CampusHire stack on the internal network (monitoring profile of deploy/docker-compose.prod.yml).
+# The API targets need BACKEND_PROMETHEUS_PATH=health/prometheus in deploy/.env.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: campushire-api
+    metrics_path: /actuator/health/prometheus
+    static_configs:
+      - targets: ["backend-1:8080"]
+        labels: { replica: backend-1 }
+      - targets: ["backend-2:8080"]
+        labels: { replica: backend-2 }
+
+  - job_name: keycloak
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["keycloak:9000"]
+
+  - job_name: openfga
+    static_configs:
+      - targets: ["openfga:2112"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
