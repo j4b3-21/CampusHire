@@ -106,6 +106,9 @@ SEED := python3 scripts/seed/seed.py
 seed: ## Seed the dev stack with the demo institute (2,000 students); needs make infra-up and make backend
 	$(SEED) --target dev $(SEED_ARGS)
 
+seed-large: ## Seed the dev stack with 10,000 students and 100 student accounts (explore the app at scale)
+	$(SEED) --target dev --students 10000 --student-accounts 100 $(SEED_ARGS)
+
 seed-load: prod-env ## Seed a staging/prod-compose stack for load tests (10,000 students, 1,500 student accounts)
 	$(SEED) --target prod --students 10000 --student-accounts 1500 --loadtest-client $(SEED_ARGS)
 

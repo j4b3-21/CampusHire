@@ -1002,14 +1002,36 @@ def parse_args():
     return args
 
 
+def unreachable(args, error):
+    hint = ("start the dev stack with `make infra-up` and the API with `make backend`"
+            if args.target == "dev" else
+            "start the production stack with `make prod-up`, or seed the dev stack with "
+            "`make seed` / `make seed-large`")
+    return SystemExit(f"seed failed: cannot reach {error}; {hint}")
+
+
+def preflight(args):
+    context = ssl._create_unverified_context() if args.insecure else None
+    for url in (args.api_url, args.keycloak_url):
+        try:
+            urllib.request.urlopen(url, context=context, timeout=5).close()
+        except urllib.error.HTTPError:
+            pass
+        except (urllib.error.URLError, OSError) as error:
+            raise unreachable(args, f"{url} ({getattr(error, 'reason', error)})")
+
+
 def main():
     args = parse_args()
     log(f"seeding {args.api_url} (Keycloak {args.keycloak_url}, client {args.client_id})")
+    preflight(args)
     started = time.time()
     try:
         Seeder(args).run()
     except ApiError as error:
         raise SystemExit(f"seed failed: {error}")
+    except urllib.error.URLError as error:
+        raise unreachable(args, f"{args.api_url} or {args.keycloak_url} ({getattr(error, 'reason', error)})")
     log(f"finished in {time.time() - started:.0f}s")
 
 

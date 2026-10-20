@@ -8,7 +8,8 @@ everything else. `data.py` holds the vocabulary (departments, batches, names, co
 make seed                                                        # demo defaults on the dev stack
 python3 scripts/seed/seed.py --target dev --students 120 --companies 6 --drives 4 --student-accounts 3   # quick
 python3 scripts/seed/seed.py --target dev --reset                # delete demo accounts, archive the institute
-make seed-load                                                   # load-test data on a staging/prod-compose stack
+make seed-large                                                  # dev stack at scale: 10,000 students, 100 accounts
+make seed-load                                                   # load-test data on a running prod-compose stack (make prod-up)
 ```
 
 Prerequisites (dev): `make infra-up` and the API on http://localhost:8090 (`make backend`). The placement officer
