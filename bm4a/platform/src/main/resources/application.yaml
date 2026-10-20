@@ -28,6 +28,12 @@ spring:
     problemdetails:
       enabled: true
 
+  servlet:
+    multipart:
+      # Uploads stream to disk; the files module enforces bm4a.files.max-size on the content itself.
+      max-file-size: ${bm4a.files.max-size}
+      max-request-size: 26MB
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -82,6 +88,22 @@ bm4a:
   ratelimit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     writes-per-minute: ${RATE_LIMIT_WRITES_PER_MINUTE:300}
+  files:
+    # filesystem (single node, tests) or s3 (MinIO / AWS S3)
+    storage: ${FILES_STORAGE:filesystem}
+    local-dir: ${FILES_LOCAL_DIR:${java.io.tmpdir}/bm4a-files}
+    max-size: 25MB
+    s3:
+      endpoint: ${S3_ENDPOINT:}
+      region: ${S3_REGION:us-east-1}
+      bucket: ${S3_BUCKET:bm4a-files}
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
+      path-style: ${S3_PATH_STYLE:true}
+  dataexchange:
+    # Zone of date-times without offset in imported files, and of date-times in exports.
+    time-zone: ${DATA_EXCHANGE_TIME_ZONE:UTC}
+    poll-interval: 2s
 
 logging:
   pattern:

@@ -5,8 +5,11 @@ import static com.bm4a.platform.modules.shared.persistence.SqlValues.ts;
 import static com.bm4a.platform.modules.shared.persistence.SqlValues.uuid;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -117,6 +120,41 @@ class RecordRepository {
                 .param("org", organizationId)
                 .param("module", moduleId)
                 .param("containment", containment)
+                .query(mapper)
+                .optional();
+    }
+
+    /** Whether an active record of the module within {@code scope} contains any of {@code containments} (JSON). */
+    boolean existsActiveContaining(UUID organizationId, UUID moduleId, RecordScopes.Predicate scope,
+            List<String> containments) {
+        Map<String, Object> params = new HashMap<>(scope.params());
+        List<String> alternatives = new ArrayList<>();
+        for (String containment : containments) {
+            String name = "d" + alternatives.size();
+            params.put(name, containment);
+            alternatives.add("r.data @> CAST(:" + name + " AS jsonb)");
+        }
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM record r WHERE r.organization_id = :org AND r.module_id = :module"
+                        + " AND r.deleted_at IS NULL AND " + scope.sql() + " AND (" + String.join(" OR ", alternatives)
+                        + "))")
+                .params(params)
+                .param("org", organizationId)
+                .param("module", moduleId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /** The active record holding a normalized unique value of a field. */
+    Optional<RecordView> findActiveByUniqueValue(UUID organizationId, UUID moduleId, UUID fieldId, String value) {
+        return jdbc.sql("""
+                SELECT r.* FROM record_unique_value u JOIN record r ON r.id = u.record_id
+                 WHERE u.organization_id = :org AND u.field_id = :field AND u.normalized_value = :value
+                   AND r.organization_id = :org AND r.module_id = :module AND r.deleted_at IS NULL
+                """)
+                .param("org", organizationId)
+                .param("field", fieldId)
+                .param("value", value)
+                .param("module", moduleId)
                 .query(mapper)
                 .optional();
     }

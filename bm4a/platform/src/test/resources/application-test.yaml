@@ -18,6 +18,8 @@ bm4a:
         host: ""
     stream:
       redis-enabled: false
+  dataexchange:
+    poll-interval: 200ms
 
 logging:
   level:

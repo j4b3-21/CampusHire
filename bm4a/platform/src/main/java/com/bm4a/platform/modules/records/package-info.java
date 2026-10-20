@@ -5,7 +5,8 @@
  * ({@link RecordScopes}) and field policies filter responses and writes. Other modules read records through
  * {@link RecordReader}, write them as trusted code through {@link RecordOperations} or on behalf of a module grant
  * holder through {@link RecordWriter}, and can veto changes through
- * {@link RecordWriteGuard} and {@link RecordDeletionGuard}.
+ * {@link RecordWriteGuard} and {@link RecordDeletionGuard}. File references are checked through a
+ * {@link FileReferenceValidator} when one is provided.
  */
 @ApplicationModule(id = "records", displayName = "Records",
         allowedDependencies = { "shared", "users", "authorization", "tenancy", "audit", "metadata", "access" })

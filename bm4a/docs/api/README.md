@@ -370,3 +370,146 @@ installer builds on published, permission-free ports that other trusted code can
 Modules created before migration V8 have no OpenFGA module tuples. Start the platform once with
 `BM4A_SYNC_MODULE_TUPLES=true` (property `bm4a.metadata.sync-module-tuples-on-startup`) to write them; the operation
 is idempotent.
+
+## Files
+
+Design: [ADR-005](../architecture/ADR-005-files-and-bulk-data-exchange.md).
+
+| Method and path | Permission |
+|-----------------|------------|
+| `POST /orgs/{orgId}/files` (multipart part `file`, max 25 MB) | active member |
+| `GET /orgs/{orgId}/files/{id}` (content), `GET .../{id}/meta` | uploader, OWNER/ADMIN, or a member who can read an active record referencing the file |
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" -F "file=@resume.pdf" $API/orgs/$ORG/files
+# -> 201, Location: /api/v1/orgs/<org>/files/<id>
+#    {id, name: "resume.pdf", contentType: "application/pdf", sizeBytes, sha256, createdAt, createdBy}
+curl -s -H "Authorization: Bearer $TOKEN" -OJ $API/orgs/$ORG/files/$FILE_ID
+```
+
+- The type is detected from the content (magic bytes), never from the name or the declared type. Allowed: PDF, PNG,
+  JPEG, WebP, XLSX, DOCX (no macro-enabled packages) and UTF-8 text (`text/csv` when the name ends in `.csv` or the
+  declared type is a CSV type, else `text/plain`). Anything else is `415 unsupported_file_type`; empty files
+  `400 empty_file`; larger than 25 MB `413 file_too_large`; object store down `503 file_storage_unavailable`.
+- Objects are stored under `<orgId>/<yyyy>/<mm>/<uuid>`; `name` is the sanitized original name (display only).
+- Downloads are `Content-Disposition: attachment; filename="<ascii>"; filename*=UTF-8''<name>`,
+  `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
+- Reading through a record: the caller must be able to read the module (ADR-004), the record must be active and
+  within their record scope, and the referencing `FILE_REFERENCE` / `IMAGE_REFERENCE` field must not be hidden from
+  them. Everyone else, including members of other organizations, gets `404`.
+- Record writes reference files as `{"fileId": "<id>", "name"?, "contentType"?}`. The file must exist in the same
+  organization (`400 validation_failed`, code `invalid_reference`); `IMAGE_REFERENCE` fields need an `image/*` file
+  (code `not_an_image`).
+
+Configuration: `FILES_STORAGE` (`filesystem` default, or `s3`), `FILES_LOCAL_DIR` (default `<java.io.tmpdir>/bm4a-files`),
+`S3_ENDPOINT` (e.g. `http://minio:9000`; empty for AWS), `S3_REGION` (`us-east-1`), `S3_BUCKET` (`bm4a-files`, created
+when missing), `S3_ACCESS_KEY` / `S3_SECRET_KEY` (empty: AWS default credential chain), `S3_PATH_STYLE` (`true`).
+The filesystem adapter suits a single node only.
+
+## Data exchange (Excel / CSV import and export)
+
+All paths are below `/orgs/{orgId}/modules/{moduleKey}`; `format` is `xlsx` (default) or `csv`.
+
+| Method and path | Permission |
+|-----------------|------------|
+| `GET /import-template?format=` | module CREATE |
+| `POST /imports/preview` (multipart part `file`) | module CREATE |
+| `POST /imports` (multipart parts `file` and optional `options`) -> `202` | module CREATE (+ UPDATE for `UPSERT`) |
+| `GET /imports[?page=&size=]`, `GET /imports/{jobId}` | module CREATE; admins see every job, members their own |
+| `POST /imports/{jobId}/cancel` | as above |
+| `GET /imports/{jobId}/errors?format=` | as above |
+| `GET /export?format=&filter[...]=&sort=&q=` | module READ (record scope and hidden fields apply) |
+
+Only *importable* fields appear in templates, previews and mappings: active, not `readOnly`, and neither hidden nor
+read-only for the caller's role. Column headers are field labels (`Label (api_key)` when two fields share a label).
+
+**Template**: XLSX with a data sheet (header row, drop-downs for single-select and boolean columns) and a `Fields`
+sheet (`Column`, `Field key`, `Type`, `Required`, `Unique`, `Allowed values`, `Example`); CSV has the header row only.
+
+**Preview** (`POST /imports/preview`, nothing is stored):
+
+```json
+{"fileName": "students.xlsx", "format": "XLSX",
+ "headers": ["Roll Number", "Name", "Dept", "Notes"],
+ "rows": [["21CS0001", "Asha", "CSE", ""]],
+ "totalRows": 5000, "maxRows": 50000,
+ "suggestedMapping": {"Roll Number": "roll_number", "Name": "full_name"},
+ "fields": [{"key": "roll_number", "label": "Roll number", "header": "Roll number", "type": "TEXT",
+             "required": true, "unique": true}]}
+```
+
+`rows` holds the first 20 data rows aligned with `headers`; `totalRows` counts non-blank rows after the header.
+Suggestions match the exact API key, then the label ignoring case/spaces/punctuation, then a `(api_key)` suffix, then
+the API key ignoring case/punctuation; unmatched headers are absent. `fields` lists the importable fields.
+
+**Import job**: the `options` part must be sent as `application/json` (in browsers:
+`form.append("options", new Blob([JSON.stringify(options)], {type: "application/json"}))`):
+
+```json
+{"mode": "UPSERT", "matchField": "roll_number", "dryRun": false,
+ "mapping": {"Roll Number": "roll_number", "Name": "full_name", "Dept": "department", "Notes": null}}
+```
+
+`mode` defaults to `CREATE`; `matchField` (a unique field, mapped) is required for `UPSERT` and rejected otherwise;
+without `mapping` the suggested mapping is used; a `null` field key skips a column. `202` returns the job (and
+`Location`); poll `GET /imports/{jobId}` until `status` is `COMPLETED`, `FAILED` or `CANCELLED`:
+
+```json
+{"id": "...", "module": "student", "fileName": "students.xlsx", "fileId": "...", "format": "XLSX",
+ "mode": "UPSERT", "matchField": "roll_number", "mapping": {"Roll Number": "roll_number", "Name": "full_name"},
+ "dryRun": false, "status": "RUNNING",
+ "totalRows": 5000, "processedRows": 1500, "createdRows": 1200, "updatedRows": 290, "failedRows": 10,
+ "errorReportAvailable": false,
+ "errors": [{"row": 7, "column": "E-mail", "field": "email", "code": "format",
+             "message": "must be a valid e-mail address"}],
+ "errorMessage": null, "createdBy": "...", "createdAt": "2026-10-20T10:00:00Z",
+ "startedAt": "2026-10-20T10:00:01Z", "finishedAt": null}
+```
+
+- `status`: `QUEUED` -> `RUNNING` -> `COMPLETED` | `FAILED` | `CANCELLED`. `totalRows` is `null` until counted.
+  `errors` holds the first 100 failures (`row` is the spreadsheet row number, header = row 1; `column`/`field` are
+  `null` for row-level problems). `errorMessage` explains `FAILED` jobs (permission lost, mapping no longer valid,
+  more than 50,000 rows, interrupted worker).
+- Rows are written in batches of 500, each in one transaction through the record engine (same validation, unique
+  checks, lookups, history and audit as the API; records are owned by and attributed to the importing user). A failing
+  row never affects other rows. `dryRun` performs the same writes and rolls every transaction back, so the counts and
+  errors are exactly what a real run would produce against the current data (`createdRows`/`updatedRows` then mean
+  "would be").
+- `UPSERT` finds existing records by `matchField` as uniqueness compares values (case-insensitive for text) within
+  the caller's update scope, patches only the mapped columns (empty cells leave values unchanged) and never rewrites
+  the match field; rows without a match are created. Re-running a file is idempotent.
+- Cell conversion: numbers drop grouping separators (`1,23,456`); currency `1200.50`, `INR 1200`, `1200 USD`, `₹500`
+  (default: the field's first allowed currency, else INR); booleans `yes/no/true/false/y/n/1/0`; dates `2026-10-20`,
+  `20/10/2026` (day first; also `-` and `.`), `20-Oct-2026`, `20261020` or Excel date cells/serials; date-times
+  additionally `2026-10-20 10:15[:ss]`, ISO-8601 with offset, or Excel date-time cells (values without offset are in
+  `DATA_EXCHANGE_TIME_ZONE`, default UTC); select options by value or label, case-insensitive, multi-select separated
+  by `,` or `;`; lookups by record ID, by a unique text/e-mail/phone/URL/integer field of the target (e.g. department
+  code `CSE`), or by an exact match of a searchable text field; file references by file ID. A leading `'` before
+  `= + - @` (formula protection in exports) is removed.
+- One `QUEUED`/`RUNNING` job per module and organization (`409 import_in_progress`). Limits: 25 MB, 50,000 data rows,
+  500 columns; XLSX reads the first worksheet, CSV must be UTF-8 (optional BOM; `,`, `;` or tab detected).
+- Cancel: queued jobs stop immediately, running jobs after the current batch (completed batches stay written);
+  finished jobs `409 import_finished`. Workers recover jobs whose heartbeat is older than 5 minutes: dry runs are
+  queued again, real imports fail with an explanation (re-import in `UPSERT` mode).
+- Error report (`GET /imports/{jobId}/errors`): the failed rows with their original columns plus `row` and `error`
+  (`"<column>: <message>; ..."`); fix and re-upload it as is (the extra columns are not mapped). `404` when no row
+  failed, `409 import_not_finished` while the job runs.
+
+Row error codes (`errors[].code`): conversion `type`, `format`, `option`, `invalid_reference` (lookup not found),
+`lookup_ambiguous`, `duplicate_in_file` (unique value repeated in the file; message names the first row),
+`empty_row`, `required` (UPSERT row without match value); record engine `required`, `unique`, `max_length`,
+`min_length`, `min`, `max`, `scale`, `precision`, `currency`, `max_selections`, `invalid_reference`, `not_an_image`,
+`read_only`, `field_deprecated`, `scope_violation`, `conflict`, and guard-specific codes.
+
+Request errors: `400 invalid_format`, `empty_file`, `unreadable_file`, `duplicate_header`, `too_many_columns`,
+`empty_mapping`, `validation_failed` (paths `mapping.<header>` with codes `unknown_column`, `unknown_field`,
+`field_read_only`, `duplicate_field`, `required_field_unmapped`, and `matchField` with `match_field`);
+`403 access_denied`; `409 import_in_progress`, `module_archived`; `413 file_too_large`; `415 unsupported_file_type`.
+
+**Export**: the visible, non-hidden fields in field order (labels as headers) plus `Record ID`, `Created at`,
+`Updated at`, for the records the caller can read, filtered/sorted/searched like `GET .../records` (all pages).
+Select values are labels, lookups the target's identifying value (e.g. `CSE`) when the caller can read that record,
+else its ID; date-times in `DATA_EXCHANGE_TIME_ZONE`. XLSX uses native number/date/boolean cells, currency formats
+and a frozen, filtered header row; CSV is UTF-8 with BOM. Text starting with `= + - @`, tab or CR is prefixed with
+`'`. File name `<module>-<yyyyMMdd-HHmm>.<ext>`. Exports are audited (`records.exported`); an export can be
+imported again (`UPSERT`) without changes.

@@ -3,13 +3,16 @@ package com.bm4a.platform.support;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.UnsupportedEncodingException;
+import java.util.List;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import com.jayway.jsonpath.JsonPath;
@@ -96,6 +99,14 @@ public final class TestApi {
 
         public ResultActions delete(String url, String ifMatch, Object... vars) throws Exception {
             return perform(MockMvcRequestBuilders.delete(url, vars), ifMatch);
+        }
+
+        /** {@code multipart/form-data} POST; parts typed {@code application/json} bind to {@code @RequestPart} objects. */
+        public ResultActions multipart(String url, List<MockMultipartFile> parts, Object... vars) throws Exception {
+            MockMultipartHttpServletRequestBuilder request = MockMvcRequestBuilders.multipart(url, vars);
+            parts.forEach(request::file);
+            request.header(HttpHeaders.AUTHORIZATION, identity.bearer());
+            return mvc.perform(request);
         }
 
         private MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, String json) {

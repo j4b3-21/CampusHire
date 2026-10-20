@@ -3,6 +3,10 @@ package com.bm4a.platform.support;
 import static com.bm4a.platform.support.TestApi.read;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.Base64;
+import java.util.List;
+
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
 
 import com.bm4a.platform.support.TestApi.Caller;
@@ -82,6 +86,20 @@ public final class Fixtures {
     public static String createRecord(Caller caller, String org, String module, String data) throws Exception {
         MvcResult result = caller.post("/api/v1/orgs/{org}/modules/{module}/records", "{\"data\":" + data + "}", org,
                 module).andExpect(status().isCreated()).andReturn();
+        return read(result, "$.id");
+    }
+
+    /** A 1x1 PNG image. */
+    public static final byte[] PNG = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
+
+    /** Uploads a file through the files API and returns its ID. */
+    public static String uploadFile(Caller caller, String org, String name, String contentType, byte[] content)
+            throws Exception {
+        MvcResult result = caller.multipart("/api/v1/orgs/{org}/files",
+                List.of(new MockMultipartFile("file", name, contentType, content)), org)
+                .andExpect(status().isCreated())
+                .andReturn();
         return read(result, "$.id");
     }
 }

@@ -10,11 +10,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bm4a.platform.modules.access.FieldPolicy;
@@ -29,6 +31,7 @@ import com.bm4a.platform.modules.metadata.FieldType;
 import com.bm4a.platform.modules.metadata.FieldValues;
 import com.bm4a.platform.modules.metadata.ModuleSchema;
 import com.bm4a.platform.modules.metadata.ModuleSchemas;
+import com.bm4a.platform.modules.records.FileReferenceValidator;
 import com.bm4a.platform.modules.records.RecordData;
 import com.bm4a.platform.modules.records.RecordDeletionGuard;
 import com.bm4a.platform.modules.records.RecordEvent;
@@ -72,6 +75,7 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
     private final RecordPayloadValidator validator;
     private final ObjectProvider<RecordDeletionGuard> deletionGuards;
     private final ObjectProvider<RecordWriteGuard> writeGuards;
+    private final ObjectProvider<FileReferenceValidator> fileValidators;
     private final UserDirectory users;
     private final AuditLog audit;
     private final ApplicationEventPublisher events;
@@ -80,12 +84,14 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
 
     RecordService(RecordRepository repository, ModuleSchemas schemas, RecordPayloadValidator validator,
             ObjectProvider<RecordDeletionGuard> deletionGuards, ObjectProvider<RecordWriteGuard> writeGuards,
-            UserDirectory users, AuditLog audit, ApplicationEventPublisher events, JsonColumns json, Clock clock) {
+            ObjectProvider<FileReferenceValidator> fileValidators, UserDirectory users, AuditLog audit,
+            ApplicationEventPublisher events, JsonColumns json, Clock clock) {
         this.repository = repository;
         this.schemas = schemas;
         this.validator = validator;
         this.deletionGuards = deletionGuards;
         this.writeGuards = writeGuards;
+        this.fileValidators = fileValidators;
         this.users = users;
         this.audit = audit;
         this.events = events;
@@ -208,6 +214,37 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
                 .filter(record -> !record.deleted());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean anyActiveContaining(ModuleGrant grant, Collection<ObjectNode> documents) {
+        if (documents.isEmpty()) {
+            return false;
+        }
+        List<String> containments = documents.stream().map(json::write).toList();
+        return repository.existsActiveContaining(grant.tenant().organizationId(), grant.module().id(), scope(grant),
+                containments);
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public void forEachActive(ModuleGrant grant, Map<String, List<String>> parameters, String sort, String q,
+            int pageSize, Consumer<List<RecordView>> pages) {
+        if (pageSize < 1) {
+            throw new IllegalArgumentException("pageSize must be positive");
+        }
+        RecordQuery query = RecordQuery.build(grant.tenant().organizationId(), grant.module(),
+                parameters == null ? Map.of() : parameters, sort, q, false, grant.fields(), scope(grant));
+        for (long offset = 0;; offset += pageSize) {
+            List<RecordView> page = repository.list(query, offset, pageSize);
+            if (!page.isEmpty()) {
+                pages.accept(page);
+            }
+            if (page.size() < pageSize) {
+                return;
+            }
+        }
+    }
+
     // ---- RecordOperations (trusted, no permission checks) --------------------------------------------------
 
     @Override
@@ -246,6 +283,27 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
         }
         return repository.findFirstActiveContaining(organizationId, module.id(),
                 RecordRepository.containment(field.apiKey(), outcome.value(), json));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RecordView> findActiveByUniqueValue(UUID organizationId, String moduleKey, String fieldKey,
+            JsonNode value) {
+        ModuleSchema module = schemas.find(organizationId, moduleKey).orElseThrow(() -> ApiException.notFound("Module"));
+        FieldSchema field = module.field(fieldKey).filter(FieldSchema::visible)
+                .orElseThrow(() -> ApiException.validation("fieldKey", "unknown_field", "unknown field " + fieldKey));
+        if (!field.unique()) {
+            throw ApiException.badRequest("field_not_unique", "Field '" + fieldKey + "' is not unique");
+        }
+        FieldValues.Outcome outcome = FieldValues.canonicalize(field, value, value);
+        if (!outcome.valid()) {
+            throw ApiException.validation("value", outcome.code(), outcome.message());
+        }
+        if (!outcome.hasValue()) {
+            return Optional.empty();
+        }
+        return repository.findActiveByUniqueValue(organizationId, module.id(), field.id(),
+                FieldValues.normalizedForUniqueness(field.type(), outcome.value()));
     }
 
     @Override
@@ -308,6 +366,7 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
         RecordView record = new RecordView(id, tenant.organizationId(), module.id(), result.data(), 1,
                 module.version(), now, tenant.userId(), now, tenant.userId(), null, null, owner);
         validateLookups(tenant, module, result.data(), result.changedFields());
+        validateFileReferences(tenant, module, result.data(), result.changedFields());
         repository.insert(record);
         claimUniqueValues(tenant, module, record.id(), json.newObject(), result.data(), result.changedFields());
         repository.insertVersion(record, "CREATED", now, tenant.userId());
@@ -332,6 +391,7 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
         }
         guard(grant, id, current, result, trusted);
         validateLookups(tenant, module, result.data(), result.changedFields());
+        validateFileReferences(tenant, module, result.data(), result.changedFields());
         claimUniqueValues(tenant, module, id, current.data(), result.data(), result.changedFields());
         Instant now = SqlValues.now(clock);
         RecordView updated = new RecordView(id, current.organizationId(), current.moduleId(), result.data(),
@@ -421,6 +481,29 @@ public class RecordService implements RecordReader, RecordOperations, RecordWrit
                 violations.add(new FieldViolation("data." + key, "invalid_reference",
                         "referenced " + field.config().targetModuleKey() + " record does not exist"));
             }
+        }
+        if (!violations.isEmpty()) {
+            throw ApiException.validation(violations);
+        }
+    }
+
+    private void validateFileReferences(TenantContext tenant, ModuleSchema module, ObjectNode data,
+            List<String> changed) {
+        FileReferenceValidator files = fileValidators.getIfAvailable();
+        if (files == null) {
+            return;
+        }
+        List<FieldViolation> violations = new ArrayList<>();
+        for (String key : changed) {
+            FieldSchema field = module.field(key).orElse(null);
+            if (field == null || !data.has(key)
+                    || (field.type() != FieldType.FILE_REFERENCE && field.type() != FieldType.IMAGE_REFERENCE)) {
+                continue;
+            }
+            files.validate(tenant.organizationId(), data.get(key).get("fileId").asString(),
+                    field.type() == FieldType.IMAGE_REFERENCE)
+                    .ifPresent(rejection -> violations.add(
+                            new FieldViolation("data." + key, rejection.code(), rejection.message())));
         }
         if (!violations.isEmpty()) {
             throw ApiException.validation(violations);
