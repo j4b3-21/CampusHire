@@ -132,6 +132,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             case 404 -> "not_found";
             case 405 -> "method_not_allowed";
             case 406 -> "not_acceptable";
+            case 413 -> "file_too_large";
             case 415 -> "unsupported_media_type";
             default -> status.is5xxServerError() ? "internal_error" : "request_failed";
         };

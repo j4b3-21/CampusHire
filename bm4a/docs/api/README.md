@@ -194,3 +194,38 @@ platform only logs that an invitation was created (never the link).
 Modules created before migration V8 have no OpenFGA module tuples. Start the platform once with
 `BM4A_SYNC_MODULE_TUPLES=true` (property `bm4a.metadata.sync-module-tuples-on-startup`) to write them; the operation
 is idempotent.
+
+## Files
+
+Design: [ADR-005](../architecture/ADR-005-files-and-bulk-data-exchange.md).
+
+| Method and path | Permission |
+|-----------------|------------|
+| `POST /orgs/{orgId}/files` (multipart part `file`, max 25 MB) | active member |
+| `GET /orgs/{orgId}/files/{id}` (content), `GET .../{id}/meta` | uploader, OWNER/ADMIN, or a member who can read an active record referencing the file |
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" -F "file=@resume.pdf" $API/orgs/$ORG/files
+# -> 201, Location: /api/v1/orgs/<org>/files/<id>
+#    {id, name: "resume.pdf", contentType: "application/pdf", sizeBytes, sha256, createdAt, createdBy}
+curl -s -H "Authorization: Bearer $TOKEN" -OJ $API/orgs/$ORG/files/$FILE_ID
+```
+
+- The type is detected from the content (magic bytes), never from the name or the declared type. Allowed: PDF, PNG,
+  JPEG, WebP, XLSX, DOCX (no macro-enabled packages) and UTF-8 text (`text/csv` when the name ends in `.csv` or the
+  declared type is a CSV type, else `text/plain`). Anything else is `415 unsupported_file_type`; empty files
+  `400 empty_file`; larger than 25 MB `413 file_too_large`; object store down `503 file_storage_unavailable`.
+- Objects are stored under `<orgId>/<yyyy>/<mm>/<uuid>`; `name` is the sanitized original name (display only).
+- Downloads are `Content-Disposition: attachment; filename="<ascii>"; filename*=UTF-8''<name>`,
+  `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
+- Reading through a record: the caller must be able to read the module (ADR-004), the record must be active and
+  within their record scope, and the referencing `FILE_REFERENCE` / `IMAGE_REFERENCE` field must not be hidden from
+  them. Everyone else, including members of other organizations, gets `404`.
+- Record writes reference files as `{"fileId": "<id>", "name"?, "contentType"?}`. The file must exist in the same
+  organization (`400 validation_failed`, code `invalid_reference`); `IMAGE_REFERENCE` fields need an `image/*` file
+  (code `not_an_image`).
+
+Configuration: `FILES_STORAGE` (`filesystem` default, or `s3`), `FILES_LOCAL_DIR` (default `<java.io.tmpdir>/bm4a-files`),
+`S3_ENDPOINT` (e.g. `http://minio:9000`; empty for AWS), `S3_REGION` (`us-east-1`), `S3_BUCKET` (`bm4a-files`, created
+when missing), `S3_ACCESS_KEY` / `S3_SECRET_KEY` (empty: AWS default credential chain), `S3_PATH_STYLE` (`true`).
+The filesystem adapter suits a single node only.

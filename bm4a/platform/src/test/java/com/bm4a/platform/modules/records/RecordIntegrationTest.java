@@ -5,6 +5,7 @@ import static com.bm4a.platform.support.Fixtures.addMember;
 import static com.bm4a.platform.support.Fixtures.createModule;
 import static com.bm4a.platform.support.Fixtures.createOrg;
 import static com.bm4a.platform.support.Fixtures.createRecord;
+import static com.bm4a.platform.support.Fixtures.uploadFile;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.bm4a.platform.support.Fixtures;
 import com.bm4a.platform.support.IntegrationTest;
 import com.bm4a.platform.support.TestApi;
 import com.bm4a.platform.support.TestApi.Caller;
@@ -49,11 +51,12 @@ class RecordIntegrationTest {
 
     @Test
     void createReadUpdateListWithCanonicalValuesAndDefaults() throws Exception {
+        String photo = uploadFile(owner, org, "photo.png", "image/png", Fixtures.PNG);
         String id = createRecord(owner, org, "example_asset", """
                 {"name": " Laptop ", "serial": "SN-1", "weight": "1.250", "price": {"amount": 1200.5, "currency": "usd"},
                  "checked_at": "2026-10-20T11:45:00+05:30", "purchased_on": "2026-01-15", "condition": "new",
-                 "tags": ["office", "it"], "specs": {"ram": 16}, "photo": {"fileId": "img-1", "contentType": "image/png"}}
-                """);
+                 "tags": ["office", "it"], "specs": {"ram": 16}, "photo": {"fileId": "%s", "contentType": "image/png"}}
+                """.formatted(photo));
 
         owner.get(RECORD, org, id)
                 .andExpect(status().isOk())
