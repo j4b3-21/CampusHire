@@ -1,0 +1,15 @@
+# Test profile. Containers (PostgreSQL, OpenFGA) are provided by TestcontainersConfiguration.
+
+bm4a:
+  security:
+    jwt:
+      issuer-uri: https://issuer.test/realms/bm4a
+      jwk-set-uri: https://issuer.test/realms/bm4a/protocol/openid-connect/certs
+      audience: bm4a-api
+  ratelimit:
+    enabled: false
+
+logging:
+  level:
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN

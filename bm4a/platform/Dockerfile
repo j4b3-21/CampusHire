@@ -18,7 +18,7 @@ RUN groupadd --system --gid 10001 bm4a \
 
 WORKDIR /app
 
-COPY --from=build /workspace/target/bm4a-platform.jar /app/app.jar
+COPY --from=build /workspace/target/bm4a-platform-exec.jar /app/app.jar
 
 USER 10001:10001
 
