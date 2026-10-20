@@ -53,6 +53,9 @@ spring:
     detection-strategy: explicitly-annotated
 
 bm4a:
+  app:
+    name: ${APP_NAME:CampusHire}
+    base-url: ${APP_BASE_URL:http://localhost:3000}
   security:
     jwt:
       issuer-uri: ${KEYCLOAK_ISSUER_URI:http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:8180}/realms/${KEYCLOAK_REALM:campushire}}
