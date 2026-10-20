@@ -21,6 +21,7 @@
 		<!-- Same versions as the platform's dataexchange module. -->
 		<poi.version>5.5.1</poi.version>
 		<commons-csv.version>1.14.1</commons-csv.version>
+		<openpdf.version>3.0.5</openpdf.version>
 	</properties>
 
 	<dependencies>
@@ -43,6 +44,11 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-csv</artifactId>
 			<version>${commons-csv.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>${openpdf.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>io.micrometer</groupId>
