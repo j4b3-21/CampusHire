@@ -38,6 +38,7 @@ import com.bm4a.platform.modules.records.RecordScopes;
 import com.bm4a.platform.modules.records.RecordView;
 import com.bm4a.platform.modules.records.RecordWrite;
 import com.bm4a.platform.modules.records.RecordWriteGuard;
+import com.bm4a.platform.modules.records.RecordWriter;
 import com.bm4a.platform.modules.records.internal.RecordPayloadValidator.Mode;
 import com.bm4a.platform.modules.records.internal.RecordPayloadValidator.Result;
 import com.bm4a.platform.modules.shared.error.ApiException;
@@ -61,7 +62,7 @@ import tools.jackson.databind.node.ObjectNode;
  * publishes a {@link RecordEvent}, all in one transaction.
  */
 @Service
-public class RecordService implements RecordReader, RecordOperations {
+public class RecordService implements RecordReader, RecordOperations, RecordWriter {
 
     private static final int AUDIT_VALUE_LIMIT = 256;
     private static final String SCOPE_PARAM_PREFIX = "s";
@@ -117,8 +118,9 @@ public class RecordService implements RecordReader, RecordOperations {
         return update(grant, id, expectedVersion, data, Mode.REPLACE, "UPDATED", false);
     }
 
+    @Override
     @Transactional
-    public RecordView patch(ModuleGrant grant, UUID id, long expectedVersion, JsonNode data) {
+    public RecordView patch(ModuleGrant grant, UUID id, Long expectedVersion, JsonNode data) {
         return update(grant, id, expectedVersion, data, Mode.MERGE, "UPDATED", false);
     }
 

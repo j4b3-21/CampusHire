@@ -99,19 +99,30 @@ class ModuleAccessService implements ModuleAccess {
                 modules);
     }
 
+    @Override
+    public Optional<ModuleGrant> find(TenantContext tenant, String moduleKey, RecordAction action) {
+        ActiveMembership membership = tenants.requireMembership(tenant.userId(), tenant.organizationId());
+        ModuleSchema module = schemas.find(tenant.organizationId(), moduleKey)
+                .orElseThrow(() -> ApiException.notFound("Module"));
+        return grant(membership, module, action);
+    }
+
     private ModuleGrant require(UUID userId, UUID organizationId, String moduleKey, RecordAction action) {
         ActiveMembership membership = tenants.requireMembership(userId, organizationId);
         ModuleSchema module = schemas.find(organizationId, moduleKey).orElseThrow(() -> ApiException.notFound("Module"));
+        return grant(membership, module, action).orElseThrow(() -> denied(membership, module, action));
+    }
+
+    private Optional<ModuleGrant> grant(ActiveMembership membership, ModuleSchema module, RecordAction action) {
         if (!moduleAllowed(membership, module, action)) {
-            throw denied(membership, module, action);
+            return Optional.empty();
         }
         Optional<RoleRow> role = role(membership);
         RolePermissions permissions = role.map(row -> RolePermissions.parse(row.permissions()))
                 .orElse(RolePermissions.EMPTY);
-        Decision decision = decide(membership, permissions, module, action)
-                .orElseThrow(() -> denied(membership, module, action));
-        return new ModuleGrant(membership.context(), module, action, decision.scope(), decision.fields(),
-                role.map(RoleRow::apiKey).orElse(null));
+        return decide(membership, permissions, module, action)
+                .map(decision -> new ModuleGrant(membership.context(), module, action, decision.scope(),
+                        decision.fields(), role.map(RoleRow::apiKey).orElse(null)));
     }
 
     private boolean moduleAllowed(ActiveMembership membership, ModuleSchema module, RecordAction action) {

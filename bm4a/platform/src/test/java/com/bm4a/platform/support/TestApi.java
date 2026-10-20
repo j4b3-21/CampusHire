@@ -82,6 +82,10 @@ public final class TestApi {
             return perform(MockMvcRequestBuilders.post(url, vars), ifMatch);
         }
 
+        public ResultActions postWithIfMatch(String url, String ifMatch, String json, Object... vars) throws Exception {
+            return perform(json(MockMvcRequestBuilders.post(url, vars), json), ifMatch);
+        }
+
         public ResultActions patch(String url, String ifMatch, String json, Object... vars) throws Exception {
             return perform(json(MockMvcRequestBuilders.patch(url, vars), json), ifMatch);
         }
