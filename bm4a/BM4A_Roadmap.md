@@ -16,7 +16,7 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 0 - Organizations (create, settings, lifecycle, isolation) | Done | Archive by owner; suspend/reactivate by platform admin |
 | 0 - Subscription management | Deferred | Needs billing model |
 | 0 - Users: profiles, preferences | Done | `(issuer, subject)` identity, JIT provisioning |
-| 0 - Users: invitations, teams | Partial | E-mail invitations done (ADR-004: hashed single-use tokens, verified e-mail, 7-day expiry, `InvitationMailer` SPI); teams deferred (OpenFGA usersets) |
+| 0 - Users: invitations, teams | Partial | E-mail invitations done (ADR-004: hashed single-use tokens, verified e-mail, 7-day expiry, sent through the notifications outbox); teams deferred (OpenFGA usersets) |
 | 0 - Authentication (OAuth2/OIDC, SSO, MFA, Google) | Done / Keycloak-configured | API validates issuer, audience, expiry, signature. MFA/Google/SSO are Keycloak realm settings |
 | 0 - Authorization: organization permissions (OpenFGA) | Done | Owner/admin/member model, fail-closed, outbox tuple sync |
 | 0 - Audit: data changes, security events | Done | Append-only (DB triggers), redaction; login tracking stays in Keycloak events |
@@ -32,6 +32,8 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 5-8 - Workflow, automation, forms, reporting | Deferred | Extension point: `RecordEvent` published on every record change |
 | Admin UI | Deferred | API-first milestone: OpenAPI/Swagger UI, request collection |
 | Platform operations | Done | Docker (non-root), compose with health checks, CI, health probes, metrics, rate limiting |
+| Notifications (in-app, real-time, e-mail) | Done | ADR-007: `Notifier` API, notification list/read API, SSE stream fanned out through Redis pub/sub, SMTP outbox worker with retries, Thymeleaf templates, invitation e-mail |
+| Caching: module schemas | Done | ADR-007: Redis, 10-minute TTL, generation-based eviction after commit, circuit breaker with PostgreSQL fallback; role documents and app-level caches deferred |
 
 ---
 
