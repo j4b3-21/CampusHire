@@ -9,6 +9,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { ArrowLeft, Briefcase, GraduationCap, LogOut } from "lucide-react";
 
+import { DomainsInput } from "@/components/common/domains-input";
 import { BrandWordmark } from "@/components/common/brand";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
@@ -37,10 +38,11 @@ function CreateInstituteForm() {
   const create = useCreateOrganization();
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { name: "" } });
   const nameError = form.formState.errors.name?.message;
+  const [domains, setDomains] = React.useState<string[]>([]);
 
   const onSubmit = form.handleSubmit(async ({ name }) => {
     try {
-      const result = await create.mutateAsync({ name });
+      const result = await create.mutateAsync({ name, allowedEmailDomains: domains });
       toast.success(`${result.organization.name} is ready`, {
         description: result.setupCompleted
           ? "CampusHire modules are installed."
@@ -78,6 +80,13 @@ function CreateInstituteForm() {
             {nameError}
           </p>
         ) : null}
+        <Label htmlFor="institute-domains" className="mt-3">
+          Student email domains <span className="font-normal text-muted-foreground">(optional)</span>
+        </Label>
+        <DomainsInput id="institute-domains" value={domains} onChange={setDomains} describedBy="institute-domains-hint" />
+        <p id="institute-domains-hint" className="text-xs text-muted-foreground">
+          Students signing in with these addresses are matched to their records. You can change this later in Settings.
+        </p>
         <Button type="submit" className="mt-3 self-start" disabled={create.isPending}>
           {create.isPending ? <Spinner className="text-primary-foreground" /> : null}
           {create.isPending ? "Creating institute…" : "Create institute"}

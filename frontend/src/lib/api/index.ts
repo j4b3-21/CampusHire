@@ -7,3 +7,7 @@ export * from "@/lib/api/hooks/organizations";
 export * from "@/lib/api/hooks/metadata";
 export * from "@/lib/api/hooks/records";
 export * from "@/lib/api/hooks/files";
+export * from "@/lib/api/hooks/workflow";
+export * from "@/lib/api/hooks/access";
+export * from "@/lib/api/hooks/members";
+export * from "@/lib/api/hooks/metadata-admin";

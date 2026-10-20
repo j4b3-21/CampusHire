@@ -15,6 +15,19 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
   rate_limited: "Too many requests. Wait a moment and try again.",
   authorization_unavailable: "The permissions service is unavailable. Try again in a moment.",
   internal_error: "Something went wrong on the server. Try again, and contact support if it keeps happening.",
+  comment_required: "This step needs a comment explaining the change.",
+  role_in_use: "Members or pending invitations still use this role. Assign them another role first.",
+  role_exists: "A role with this key already exists.",
+  module_exists: "A module with this key already exists.",
+  field_exists: "A field with this key already exists.",
+  already_member: "This person is already a member of the institute.",
+  invitation_pending: "There's already a pending invitation for this email address.",
+  invitation_used: "This invitation has already been used.",
+  invitation_expired: "This invitation has expired. Ask your placement cell for a new one.",
+  invitation_revoked: "This invitation was revoked. Ask your placement cell for a new one.",
+  invitation_email_mismatch: "This invitation was sent to a different email address than the one you're signed in with.",
+  email_not_verified: "Verify your email address before accepting the invitation.",
+  last_owner: "An institute needs at least one owner.",
 };
 
 /** Error thrown for every non-2xx API response (and for network failures, with `status` 0). */

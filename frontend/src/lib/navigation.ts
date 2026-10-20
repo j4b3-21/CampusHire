@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Upload,
+  Users,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,10 +78,10 @@ export interface AdminNavItem {
 
 export const ADMIN_NAV: AdminNavItem[] = [
   {
-    section: "import",
-    label: "Data import",
-    icon: Upload,
-    description: "Upload students, companies and shortlists from Excel or CSV, with a dry run and an error report.",
+    section: "members",
+    label: "Members",
+    icon: Users,
+    description: "Everyone with access to the institute, their roles, and pending invitations.",
   },
   {
     section: "roles",
@@ -88,10 +90,22 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: "Decide what placement staff, coordinators, students and recruiters can see and change.",
   },
   {
-    section: "customize",
+    section: "workflows",
+    label: "Workflows",
+    icon: Workflow,
+    description: "Stages for applications, drives and other records, and who may move them between stages.",
+  },
+  {
+    section: "modules",
     label: "Customize modules",
     icon: SlidersHorizontal,
     description: "Add fields, arrange form layouts and edit pick-list options without a deployment.",
+  },
+  {
+    section: "import",
+    label: "Data import",
+    icon: Upload,
+    description: "Upload students, companies and shortlists from Excel or CSV, with a dry run and an error report.",
   },
   {
     section: "audit",
@@ -117,3 +131,4 @@ export const orgPath = (orgId: string, path = "") => `/app/${orgId}${path}`;
 export const modulePath = (orgId: string, moduleKey: string, path = "") => `/app/${orgId}/m/${moduleKey}${path}`;
 export const recordPath = (orgId: string, moduleKey: string, recordId: string, path = "") =>
   `/app/${orgId}/m/${moduleKey}/${recordId}${path}`;
+export const adminPath = (orgId: string, section: string, path = "") => `/app/${orgId}/admin/${section}${path}`;

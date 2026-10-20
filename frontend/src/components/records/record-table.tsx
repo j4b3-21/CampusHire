@@ -30,7 +30,9 @@ import {
 
 import { FilterBuilder, FilterChips } from "@/components/records/filter-builder";
 import { ConfirmDeleteDialog, useRecordActions } from "@/components/records/record-actions";
-import { EmptyValue, FieldValue } from "@/components/records/field-value";
+import { EmptyValue, FieldValue, RecordTitle } from "@/components/records/field-value";
+import { BulkTransitionAction } from "@/components/workflow/bulk-transition";
+import { WorkflowValue } from "@/components/workflow/state-badge";
 import { useTableUrlState, PAGE_SIZES } from "@/components/records/use-table-url-state";
 import { ErrorState } from "@/components/common/error-state";
 import { Button } from "@/components/ui/button";
@@ -51,7 +53,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useRecords } from "@/lib/api";
+import { useRecords, useWorkflow } from "@/lib/api";
 import { parseSort, serializeSort } from "@/lib/api/record-query";
 import { displayField, filterableFields, isNumericType, recordTitle, visibleFields } from "@/lib/metadata/fields";
 import { formatDateTime, formatInteger, formatRelative } from "@/lib/metadata/format";
@@ -108,6 +110,9 @@ export function RecordTable({ orgId, module, capabilities, bulkActions, toolbarA
   const storedHidden = useUiStore((s) => s.hiddenColumns[module.apiKey]);
   const setHiddenColumns = useUiStore((s) => s.setHiddenColumns);
   const { deleteRecords, restoreRecord, deleting } = useRecordActions(orgId, module);
+  const workflow = useWorkflow(orgId, module.apiKey);
+  const workflowStates = workflow.data?.definition.states;
+  const workflowField = workflow.data?.field;
 
   const fields = React.useMemo(() => visibleFields(module, capabilities), [module, capabilities]);
   const filterFields = React.useMemo(() => filterableFields(module, capabilities), [module, capabilities]);
@@ -179,9 +184,12 @@ export function RecordTable({ orgId, module, capabilities, bulkActions, toolbarA
                 href={recordPath(orgId, module.apiKey, row.original.id)}
                 className="focus-ring block max-w-72 truncate rounded-sm font-medium text-foreground hover:underline"
               >
-                {recordTitle(module, row.original)}
+                <RecordTitle orgId={orgId} module={module} record={row.original} />
               </Link>
             );
+          }
+          if (workflowStates && field.apiKey === workflowField && typeof value === "string" && value) {
+            return <WorkflowValue states={workflowStates} value={value} />;
           }
           return <FieldValue orgId={orgId} field={field} value={value} />;
         },
@@ -206,7 +214,7 @@ export function RecordTable({ orgId, module, capabilities, bulkActions, toolbarA
     }
     cols.push({ id: ACTIONS_COLUMN, enableHiding: false, header: () => <span className="sr-only">Actions</span> });
     return cols;
-  }, [fields, titleField, orgId, module]);
+  }, [fields, titleField, orgId, module, workflowStates, workflowField]);
 
   const columnVisibility = React.useMemo<VisibilityState>(
     () => Object.fromEntries(hidden.map((id) => [id, false])),
@@ -401,6 +409,9 @@ export function RecordTable({ orgId, module, capabilities, bulkActions, toolbarA
           </Button>
           <div className="ml-auto flex items-center gap-1.5">
             {bulkActions?.(selectedRows, clearSelection)}
+            {workflow.data && capabilities.update && !state.deleted ? (
+              <BulkTransitionAction module={module} workflow={workflow.data} selected={selectedRows} onDone={clearSelection} />
+            ) : null}
             {capabilities.delete && !state.deleted ? (
               <Button variant="destructive-outline" size="xs" onClick={() => setPendingDelete(selectedRows)}>
                 <Trash2 /> Delete

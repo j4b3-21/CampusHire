@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { downloadFile, errorMessage, useFileObjectUrl, useModule, useRecord } from "@/lib/api";
-import { lookupTarget, optionLabel, recordTitle } from "@/lib/metadata/fields";
+import { displayField, lookupTarget, optionLabel, recordTitle } from "@/lib/metadata/fields";
 import {
   formatCurrency,
   formatDate,
@@ -25,8 +25,8 @@ import { recordPath } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { JsonValue } from "@/types/api";
-import type { FieldDefinition } from "@/types/metadata";
-import type { FileReference } from "@/types/records";
+import type { FieldDefinition, ModuleDefinition } from "@/types/metadata";
+import type { FileReference, RecordItem } from "@/types/records";
 
 export type ValueVariant = "cell" | "detail";
 
@@ -81,6 +81,25 @@ export function LookupValue({
       {label}
     </Link>
   );
+}
+
+/** Record title as text, resolving LOOKUP title fields (e.g. an application titled by its student) to the target. */
+export function RecordTitle({
+  orgId,
+  module,
+  record,
+}: {
+  orgId: string;
+  module: ModuleDefinition | undefined;
+  record: Pick<RecordItem, "id" | "data">;
+}) {
+  const field = module ? displayField(module) : null;
+  const value = field ? record.data[field.apiKey] : undefined;
+  const target = field?.type === "LOOKUP" ? lookupTarget(field) : null;
+  if (target && typeof value === "string" && value) {
+    return <LookupValue orgId={orgId} targetModuleKey={target} id={value} link={false} />;
+  }
+  return <>{recordTitle(module, record)}</>;
 }
 
 function ImageThumb({ orgId, file, variant }: { orgId: string; file: FileReference; variant: ValueVariant }) {

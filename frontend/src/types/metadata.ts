@@ -107,6 +107,48 @@ export interface ModuleDefinition {
   updatedAt: Instant;
 }
 
+/** `POST .../fields` and `PATCH .../fields/{key}` body (`FieldInput.java`); omitted properties are unchanged. */
+export interface FieldInput {
+  apiKey?: string;
+  label?: string;
+  description?: string | null;
+  type?: FieldType;
+  required?: boolean;
+  unique?: boolean;
+  readOnly?: boolean;
+  sensitive?: boolean;
+  searchable?: boolean;
+  filterable?: boolean;
+  sortable?: boolean;
+  defaultValue?: JsonValue | null;
+  config?: FieldConfig | null;
+  position?: number;
+}
+
+export interface CreateModuleInput {
+  apiKey: string;
+  labelSingular: string;
+  labelPlural: string;
+  description?: string | null;
+  settings?: ModuleSettings | null;
+  fields?: FieldInput[];
+}
+
+export interface UpdateModuleInput {
+  labelSingular?: string;
+  labelPlural?: string;
+  description?: string | null;
+  settings?: ModuleSettings | null;
+}
+
+/** `GET .../modules/{key}/versions`: snapshot of the definition after each change. */
+export interface ModuleVersion {
+  version: number;
+  snapshot: JsonObject;
+  createdAt: Instant;
+  createdBy?: Uuid | null;
+}
+
 export type RelationshipCardinality = "ONE_TO_ONE" | "ONE_TO_MANY" | "MANY_TO_MANY";
 
 export interface RelationshipDefinition {

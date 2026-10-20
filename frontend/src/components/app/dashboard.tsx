@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks/use-auth";
-import { ApiError, useCampusHireSetup, useRecords } from "@/lib/api";
+import { ApiError, errorMessage, useCampusHireSetup, useCampusHireStatus, useInstalledPacks, useRecords } from "@/lib/api";
 import { formatInteger } from "@/lib/metadata/format";
 import { modulePath } from "@/lib/navigation";
 import { ModuleGlyph } from "@/components/common/module-glyph";
@@ -130,17 +130,31 @@ function SetupChecklist({ steps }: { steps: SetupStep[] }) {
   );
 }
 
+/**
+ * Whether the CampusHire pack is installed: the setup status endpoint, or the installed packs list when the status
+ * endpoint is not deployed; `undefined` while loading.
+ */
+function useCampusHireInstalled(orgId: string, enabled: boolean) {
+  const status = useCampusHireStatus(orgId, { enabled });
+  const packs = useInstalledPacks(orgId, { enabled });
+  if (status.isLoading || packs.isLoading) return undefined;
+  if (status.data?.installed) return true;
+  return (packs.data ?? []).some((pack) => pack.packKey === "campushire");
+}
+
 function InstallCallout({ orgId }: { orgId: string }) {
   const setup = useCampusHireSetup(orgId);
   const install = async () => {
     try {
-      await setup.mutateAsync();
-      toast.success("CampusHire installed");
+      await setup.mutateAsync(undefined);
+      toast.success("CampusHire installed", { description: "Modules, roles and workflows are ready." });
     } catch (error) {
-      if (error instanceof ApiError && error.isNotFound) {
+      if (error instanceof ApiError && (error.isNotFound || error.status === 405 || error.status === 501)) {
         toast.info("Setup isn't available on this server yet", {
           description: "The CampusHire backend will provide it. Modules you create by hand still work.",
         });
+      } else {
+        toast.error("Couldn't install CampusHire", { description: errorMessage(error) });
       }
     }
   };
@@ -165,7 +179,8 @@ function InstallCallout({ orgId }: { orgId: string }) {
 }
 
 export function Dashboard() {
-  const { orgId, organization, readableModules, isAdmin, loading, modules } = useOrg();
+  const { orgId, organization, readableModules, isAdmin, loading } = useOrg();
+  const installed = useCampusHireInstalled(orgId, isAdmin && !loading);
   const { profile } = useAuth();
   const steps = useSetupSteps(orgId);
   const showChecklist = isAdmin && !loading && steps.some((step) => !step.done);
@@ -178,7 +193,7 @@ export function Dashboard() {
         description={organization ? `Placement overview for ${organization.name}` : undefined}
       />
       <PageBody className="flex flex-col gap-6">
-        {isAdmin && !loading && modules.length === 0 ? <InstallCallout orgId={orgId} /> : null}
+        {isAdmin && !loading && installed === false ? <InstallCallout orgId={orgId} /> : null}
 
         <section aria-label="Key numbers" className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 xl:grid-cols-4">
           {KPIS.map((kpi) => (

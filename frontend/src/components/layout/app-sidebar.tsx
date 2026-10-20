@@ -118,7 +118,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
                 href={href}
                 label={item.label}
                 icon={item.icon}
-                active={pathname === href}
+                active={pathname === href || pathname.startsWith(`${href}/`)}
                 collapsed={collapsed}
                 onNavigate={onNavigate}
               />

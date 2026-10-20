@@ -8,7 +8,9 @@ import { ArrowLeft, Copy, MoreHorizontal, Pencil, SearchX, Trash2, Undo2 } from 
 
 import { useOrg } from "@/components/app/org-context";
 import { ConfirmDeleteDialog, useRecordActions } from "@/components/records/record-actions";
-import { FieldValue } from "@/components/records/field-value";
+import { FieldValue, RecordTitle } from "@/components/records/field-value";
+import { TransitionTimeline, WorkflowMoveMenu } from "@/components/workflow/record-workflow";
+import { StateBadge, WorkflowValue } from "@/components/workflow/state-badge";
 import { RecordHistory } from "@/components/records/record-history";
 import { RelatedRecords, useRelatedSources } from "@/components/records/related-records";
 import { ErrorState } from "@/components/common/error-state";
@@ -26,7 +28,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useMembers, useRecord, type VersionedRecord } from "@/lib/api";
+import { useMembers, useRecord, useWorkflow, type VersionedRecord } from "@/lib/api";
 import { ApiError } from "@/lib/api/errors";
 import { displayField, recordTitle, visibleFields } from "@/lib/metadata/fields";
 import { formatDateTime, formatRelative, shortId } from "@/lib/metadata/format";
@@ -34,8 +36,10 @@ import { gridColumnsClass, isWideField, resolveLayout } from "@/lib/metadata/lay
 import { modulePath, recordPath } from "@/lib/navigation";
 import { ModuleGlyph } from "@/components/common/module-glyph";
 import { cn } from "@/lib/utils";
+import { stateByKey } from "@/lib/workflow";
 import type { ModuleDefinition } from "@/types/metadata";
 import type { ModuleCapabilities } from "@/types/org";
+import type { Workflow } from "@/types/workflow";
 
 function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -68,11 +72,13 @@ function DetailFields({
   module,
   capabilities,
   record,
+  workflow,
 }: {
   orgId: string;
   module: ModuleDefinition;
   capabilities: ModuleCapabilities;
   record: VersionedRecord;
+  workflow: Workflow | null | undefined;
 }) {
   const fields = visibleFields(module, capabilities);
   const tabs = resolveLayout(module, fields);
@@ -96,7 +102,11 @@ function DetailFields({
               <div key={field.apiKey} className={cn("flex min-w-0 flex-col gap-1", isWideField(field) && "col-span-full")}>
                 <dt className="text-xs text-muted-foreground">{field.label}</dt>
                 <dd className={cn("min-w-0 text-[13px]", field.apiKey === title?.apiKey && "font-medium")}>
-                  <FieldValue orgId={orgId} field={field} value={record.data[field.apiKey]} variant="detail" />
+                  {workflow && field.apiKey === workflow.field && typeof record.data[field.apiKey] === "string" ? (
+                    <WorkflowValue states={workflow.definition.states} value={String(record.data[field.apiKey])} />
+                  ) : (
+                    <FieldValue orgId={orgId} field={field} value={record.data[field.apiKey]} variant="detail" />
+                  )}
                 </dd>
               </div>
             ))}
@@ -115,6 +125,8 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
   const { deleteRecords, restoreRecord, deleting, restoring } = useRecordActions(orgId, module);
   const userLabel = useUserLabel(orgId);
   const relatedSources = useRelatedSources(module);
+  const workflowQuery = useWorkflow(orgId, module.apiKey);
+  const workflow = workflowQuery.data;
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   if (query.isLoading) {
@@ -158,6 +170,8 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
   const record = query.data;
   const title = recordTitle(module, record);
   const deleted = Boolean(record.deletedAt);
+  const stateValue = workflow ? record.data[workflow.field] : undefined;
+  const currentState = typeof stateValue === "string" ? stateByKey(workflow, stateValue) : undefined;
 
   const copyId = async () => {
     await navigator.clipboard.writeText(record.id);
@@ -174,7 +188,10 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-xl font-semibold tracking-[-0.025em]">{title}</h1>
+                <h1 className="truncate text-xl font-semibold tracking-[-0.025em]">
+                  <RecordTitle orgId={orgId} module={module} record={record} />
+                </h1>
+                {currentState ? <StateBadge state={currentState} showCategory /> : null}
                 {deleted ? <Badge variant="destructive">In trash</Badge> : null}
               </div>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -183,6 +200,9 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {workflow && capabilities.update && !deleted ? (
+              <WorkflowMoveMenu orgId={orgId} moduleKey={module.apiKey} record={record} workflow={workflow} subject={<RecordTitle orgId={orgId} module={module} record={record} />} />
+            ) : null}
             {deleted ? (
               capabilities.update || capabilities.delete ? (
                 <Button disabled={restoring} onClick={() => void restoreRecord(record)}>
@@ -238,7 +258,7 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
             <TabsContent value="details">
-              <DetailFields orgId={orgId} module={module} capabilities={capabilities} record={record} />
+              <DetailFields orgId={orgId} module={module} capabilities={capabilities} record={record} workflow={workflow} />
             </TabsContent>
             {relatedSources.map((source) => (
               <TabsContent key={source.key} value={source.key}>
@@ -250,7 +270,16 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
             </TabsContent>
           </Tabs>
 
-          <aside aria-label="Record information" className="rounded-lg border border-border bg-card p-4 lg:sticky lg:top-16">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-16">
+          {workflow ? (
+            <section aria-labelledby="stage-history-heading" className="rounded-lg border border-border bg-card p-4">
+              <h2 id="stage-history-heading" className="mb-3 text-xs font-medium text-muted-foreground">
+                Stage history
+              </h2>
+              <TransitionTimeline orgId={orgId} moduleKey={module.apiKey} recordId={record.id} workflow={workflow} />
+            </section>
+          ) : null}
+          <aside aria-label="Record information" className="rounded-lg border border-border bg-card p-4">
             <dl className="flex flex-col gap-4">
               <MetaRow label="Created">
                 <Timestamp value={record.createdAt} /> by {userLabel(record.createdBy)}
@@ -274,6 +303,7 @@ export function RecordDetail({ module, recordId }: { module: ModuleDefinition; r
               </MetaRow>
             </dl>
           </aside>
+          </div>
         </div>
       </PageBody>
 

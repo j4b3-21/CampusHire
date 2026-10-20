@@ -173,12 +173,14 @@ export function accountUrl() {
   return `${keycloakConfig.url}/realms/${encodeURIComponent(keycloakConfig.realm)}/account`;
 }
 
-export async function logout() {
+/** Ends the Keycloak session; `next` is passed on to the login page (e.g. to come back to an invitation). */
+export async function logout({ next }: { next?: string | null } = {}) {
   clearRefreshTimer();
+  const target = next ? `/login?next=${encodeURIComponent(safeNextPath(next))}` : "/login";
   const kc = instance;
   if (!kc?.authenticated) {
-    window.location.assign("/login");
+    window.location.assign(target);
     return;
   }
-  await kc.logout({ redirectUri: `${window.location.origin}/login` });
+  await kc.logout({ redirectUri: `${window.location.origin}${target}` });
 }

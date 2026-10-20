@@ -47,7 +47,7 @@ export function resolveLayout(module: ModuleDefinition, fields: FieldDefinition[
     tabFor(section.tab?.trim() || "Details").sections.push({
       key: section.key,
       label: section.label,
-      columns: Math.min(Math.max(section.columns ?? 2, 1), 3),
+      columns: Math.min(Math.max(section.columns ?? 2, 1), 4),
       fields: sectionFields,
     });
   }
@@ -67,7 +67,8 @@ export function resolveLayout(module: ModuleDefinition, fields: FieldDefinition[
 }
 
 export function gridColumnsClass(columns: number) {
-  if (columns >= 3) return "sm:grid-cols-2 lg:grid-cols-3";
+  if (columns >= 4) return "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  if (columns === 3) return "sm:grid-cols-2 lg:grid-cols-3";
   if (columns === 2) return "sm:grid-cols-2";
   return "grid-cols-1";
 }

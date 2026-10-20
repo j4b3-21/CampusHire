@@ -23,7 +23,7 @@ export interface AuthState {
   initialize: () => Promise<void>;
   login: (options?: LoginOptions) => Promise<void>;
   register: (options?: { next?: string | null }) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (options?: { next?: string | null }) => Promise<void>;
 }
 
 let unsubscribe: (() => void) | null = null;
@@ -83,8 +83,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  logout: async () => {
+  logout: async (options) => {
     clearAuthHintCookie();
-    await keycloakLogout();
+    await keycloakLogout(options);
   },
 }));

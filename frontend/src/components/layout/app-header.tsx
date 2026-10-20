@@ -21,7 +21,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRecord } from "@/lib/api";
 import { recordTitle } from "@/lib/metadata/fields";
-import { ADMIN_NAV, modulePath, orgPath, recordPath } from "@/lib/navigation";
+import { ADMIN_NAV, adminPath, modulePath, orgPath, recordPath } from "@/lib/navigation";
 import { useUiStore } from "@/store/ui-store";
 
 interface Crumb {
@@ -31,18 +31,29 @@ interface Crumb {
 
 function useCrumbs(): Crumb[] {
   const pathname = usePathname();
-  const params = useParams<{ orgId: string; moduleKey?: string; recordId?: string; section?: string }>();
+  const params = useParams<{ orgId: string; moduleKey?: string; recordId?: string; roleKey?: string }>();
   const { orgId, organization, moduleByKey } = useOrg();
+  const adminMatch = pathname.match(/\/admin\/([a-z-]+)(?:\/([^/]+))?/);
   const definition = params.moduleKey ? moduleByKey(params.moduleKey) : undefined;
-  const record = useRecord(orgId, params.moduleKey, params.recordId, { silent: true });
+  const record = useRecord(orgId, adminMatch ? undefined : params.moduleKey, params.recordId, { silent: true });
 
   const crumbs: Crumb[] = [{ label: organization?.name ?? <Skeleton className="h-3.5 w-20" />, href: orgPath(orgId) }];
-  if (params.moduleKey) {
+  if (adminMatch) {
+    const section = adminMatch[1];
+    const item = ADMIN_NAV.find((entry) => entry.section === section);
+    crumbs.push({ label: "Admin" });
+    crumbs.push({ label: item?.label ?? section, href: adminMatch[2] ? adminPath(orgId, section) : undefined });
+    if (adminMatch[2]) {
+      const sub = decodeURIComponent(adminMatch[2]);
+      crumbs.push({ label: definition?.labelPlural ?? (sub === "new" ? "New" : sub) });
+    }
+  } else if (params.moduleKey) {
     crumbs.push({
       label: definition?.labelPlural ?? <Skeleton className="h-3.5 w-16" />,
       href: modulePath(orgId, params.moduleKey),
     });
     if (pathname.endsWith("/new")) crumbs.push({ label: "New" });
+    if (pathname.endsWith("/board")) crumbs.push({ label: "Board" });
     if (params.recordId) {
       crumbs.push({
         label: record.data ? recordTitle(definition, record.data) : <Skeleton className="h-3.5 w-24" />,
@@ -50,9 +61,6 @@ function useCrumbs(): Crumb[] {
       });
       if (pathname.endsWith("/edit")) crumbs.push({ label: "Edit" });
     }
-  } else if (params.section) {
-    crumbs.push({ label: "Admin" });
-    crumbs.push({ label: ADMIN_NAV.find((item) => item.section === params.section)?.label ?? params.section });
   } else if (pathname.endsWith("/profile")) {
     crumbs.push({ label: "Profile" });
   } else {
