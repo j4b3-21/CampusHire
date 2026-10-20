@@ -1,0 +1,101 @@
+// CampusHire delivery pipeline for the college server.
+//
+// Agent requirements: Docker Engine with Compose v2, JDK 25, Node.js 22, curl, jq.
+// Credentials (Jenkins > Credentials):
+//   campushire-prod-env   Secret file with the production deploy/.env
+// The deploy stage runs on the host that serves CampusHire (label "campushire-prod").
+
+pipeline {
+    agent { label 'campushire-build' }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        timeout(time: 60, unit: 'MINUTES')
+    }
+
+    environment {
+        IMAGE_TAG = "${env.GIT_COMMIT?.take(12) ?: env.BUILD_NUMBER}"
+        COMPOSE_FILE = 'deploy/docker-compose.prod.yml'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Backend: build and test') {
+            steps {
+                sh 'chmod +x mvnw && ./mvnw -B verify'
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                          testResults: 'bm4a/platform/target/surefire-reports/*.xml, backend/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Frontend: lint and build') {
+            steps {
+                dir('frontend') {
+                    sh 'npm ci && npm run lint && npm run build'
+                }
+            }
+        }
+
+        stage('Images') {
+            parallel {
+                stage('Backend image') {
+                    steps {
+                        sh 'docker build -f backend/Dockerfile -t campushire-backend:${IMAGE_TAG} -t campushire-backend:latest .'
+                    }
+                }
+                stage('Frontend image') {
+                    steps {
+                        sh 'docker build -f frontend/Dockerfile -t campushire-frontend:${IMAGE_TAG} -t campushire-frontend:latest frontend'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            agent { label 'campushire-prod' }
+            steps {
+                withCredentials([file(credentialsId: 'campushire-prod-env', variable: 'PROD_ENV')]) {
+                    sh '''
+                        install -m 600 "$PROD_ENV" deploy/.env
+                        docker compose -f "$COMPOSE_FILE" --env-file deploy/.env config -q
+                        deploy/scripts/backup.sh
+                        IMAGE_TAG="$IMAGE_TAG" docker compose -f "$COMPOSE_FILE" --env-file deploy/.env up -d --remove-orphans --wait
+                    '''
+                }
+            }
+        }
+
+        stage('Smoke test') {
+            when {
+                branch 'main'
+            }
+            agent { label 'campushire-prod' }
+            steps {
+                sh 'deploy/scripts/smoke-test.sh'
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Pipeline failed. The previous containers keep serving traffic; see the stage logs above.'
+        }
+        cleanup {
+            sh 'rm -f deploy/.env || true'
+        }
+    }
+}
