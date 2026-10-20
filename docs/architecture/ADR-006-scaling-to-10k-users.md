@@ -63,10 +63,13 @@ Compose; no Kubernetes is needed at this scale, and everything stays portable to
 
 ## Verification
 
-`loadtest/` contains k6 scenarios run against the production compose file with 10,000 seeded students:
-`drive-spike` (ramp to 1,500 virtual users applying and polling), `browse` (mixed reads), `staff` (imports,
-exports, analytics). Targets: **p95 < 300 ms for reads, p95 < 500 ms for apply, error rate < 0.1%**. Results are
-recorded in `docs/operations/load-test.md`.
+`loadtest/` contains k6 scenarios to run against the production compose file with 10,000 seeded students
+(`make seed-load`): `drive-spike` (ramp to 1,500 virtual users applying and polling), `browse` (mixed reads),
+`staff` (imports, exports, analytics). Targets: **p95 < 300 ms for reads, p95 < 500 ms for apply, error rate
+< 0.1%**. The full run is executed on the target server, not on a development laptop; the procedure and the
+results table are in `docs/operations/load-test.md`. Already measured in integration tests: analytics over 10,000
+students, 3,000 offers and 200,000 applications in < 50 ms (warm), 5,000-row XLSX import in about 14 s, and 20
+concurrent applies by one student producing exactly one application.
 
 ## Growth path
 
