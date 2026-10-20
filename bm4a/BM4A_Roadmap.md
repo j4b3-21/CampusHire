@@ -29,7 +29,9 @@ Legend: **Done** = implemented, tested and documented; **Partial** = foundation 
 | 4 - Permission engine: org permissions | Done | |
 | 4 - Permission engine: org roles, module / record permissions, field security | Done | ADR-004: `access` module, OpenFGA `role`/`module` types, record scopes (OWN, ATTRIBUTE, `$id`, `where`) as SQL predicates, hidden/read-only fields, `/me/access`, `RecordOperations`, `RecordWriteGuard`, `MembershipAdministration` |
 | 4 - PostgreSQL row-level security | Deferred | Defense in depth per ADR-002 section 4 |
-| 5-8 - Workflow, automation, forms, reporting | Deferred | Extension point: `RecordEvent` published on every record change |
+| 5 - Workflow engine (states, role-based transitions, history) | Done | ADR-007: `workflow` module; enforced by a `RecordWriteGuard` on every write path, transitions/bulk/available endpoints, `WorkflowTransitioned` event; SLA timers and approvals deferred |
+| App packs (declarative modules, roles, workflows, settings) | Done | `packs` module: idempotent, versioned, additive installer (`PackInstaller`, `POST /orgs/{orgId}/packs/install`) |
+| 6-8 - Automation, forms, reporting | Deferred | Extension points: `RecordEvent`, `WorkflowTransitioned` |
 | Admin UI | Deferred | API-first milestone: OpenAPI/Swagger UI, request collection |
 | Platform operations | Done | Docker (non-root), compose with health checks, CI, health probes, metrics, rate limiting |
 
