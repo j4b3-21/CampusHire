@@ -1,4 +1,4 @@
-package com.campushire.campushire.modules.auth.entity;
+package com.campushire.campushire.modules.users.entity;
 
 import jakarta.persistence.*;
 import lombok.*;

@@ -1,7 +1,7 @@
 package com.campushire.campushire.modules.auth.service;
 
 import com.campushire.campushire.modules.auth.dto.AuthUserResponse;
-import com.campushire.campushire.modules.auth.entity.User;
+import com.campushire.campushire.modules.users.entity.User;
 import com.campushire.campushire.modules.auth.mapper.AuthMapper;
 import com.campushire.campushire.modules.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;

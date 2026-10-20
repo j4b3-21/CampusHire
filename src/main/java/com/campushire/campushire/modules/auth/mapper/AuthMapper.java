@@ -1,7 +1,7 @@
 package com.campushire.campushire.modules.auth.mapper;
 
 import com.campushire.campushire.modules.auth.dto.AuthUserResponse;
-import com.campushire.campushire.modules.auth.entity.User;
+import com.campushire.campushire.modules.users.entity.User;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
 

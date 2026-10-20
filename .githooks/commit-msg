@@ -1,0 +1,14 @@
+#!/bin/sh
+# Removes tool attribution trailers (for example "Co-authored-by: Cursor <cursoragent@cursor.com>") from commit
+# messages so history only credits the people who wrote the change.
+# Enable once per clone: git config core.hooksPath .githooks
+
+msg_file="$1"
+tmp_file="$(mktemp)"
+
+grep -viE '^(co-authored-by|made-with|generated-by):.*(cursor|agent)' "$msg_file" > "$tmp_file"
+
+# Drop trailing blank lines left behind by removed trailers.
+awk '{ lines[NR] = $0 } END { n = NR; while (n > 0 && lines[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print lines[i] }' \
+    "$tmp_file" > "$msg_file"
+rm -f "$tmp_file"
