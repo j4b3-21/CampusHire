@@ -146,12 +146,12 @@
           {"value": "call", "label": "Call"}, {"value": "email", "label": "E-mail"},
           {"value": "meeting", "label": "Meeting"}, {"value": "visit", "label": "Visit"}]}},
         {"apiKey": "due_date", "label": "Due date", "type": "DATE", "required": true, "filterable": true, "sortable": true},
-        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "open", "config": {"options": [
+        {"apiKey": "follow_up_status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "open", "config": {"options": [
           {"value": "open", "label": "Open"}, {"value": "done", "label": "Done"}]}},
         {"apiKey": "notes", "label": "Notes", "type": "LONG_TEXT"}
       ],
       "layout": {"sections": [
-        {"key": "task", "label": "Follow-up", "columns": 2, "fields": ["title", "company", "contact", "type", "due_date", "status", "notes"]}
+        {"key": "task", "label": "Follow-up", "columns": 2, "fields": ["title", "company", "contact", "type", "due_date", "follow_up_status", "notes"]}
       ]}
     },
     {
@@ -188,7 +188,7 @@
         {"apiKey": "title", "label": "Title", "type": "TEXT", "required": true, "searchable": true, "sortable": true},
         {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
         {"apiKey": "job", "label": "Job", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "job"}},
-        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "draft", "config": {"options": [
+        {"apiKey": "drive_status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "draft", "config": {"options": [
           {"value": "draft", "label": "Draft"}, {"value": "published", "label": "Published"},
           {"value": "registration_closed", "label": "Registration closed"}, {"value": "in_progress", "label": "In progress"},
           {"value": "completed", "label": "Completed"}, {"value": "cancelled", "label": "Cancelled"}]}},
@@ -202,7 +202,7 @@
         {"apiKey": "description", "label": "Description", "type": "LONG_TEXT", "config": {"maxLength": 10000}}
       ],
       "layout": {"sections": [
-        {"key": "overview", "label": "Overview", "columns": 2, "fields": ["title", "company", "job", "status", "mode", "venue"]},
+        {"key": "overview", "label": "Overview", "columns": 2, "fields": ["title", "company", "job", "drive_status", "mode", "venue"]},
         {"key": "schedule", "label": "Schedule", "columns": 3, "fields": ["registration_opens_at", "registration_closes_at", "drive_date"]},
         {"key": "details", "label": "Details", "columns": 1, "fields": ["eligibility", "description"]}
       ]}
@@ -218,7 +218,7 @@
         {"apiKey": "student", "label": "Student", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "student"}},
         {"apiKey": "company", "label": "Company", "type": "LOOKUP", "required": true, "filterable": true, "config": {"targetModuleKey": "company"}},
         {"apiKey": "department", "label": "Department", "type": "LOOKUP", "filterable": true, "config": {"targetModuleKey": "department"}},
-        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "required": true, "filterable": true, "sortable": true, "defaultValue": "applied", "config": {"options": [
+        {"apiKey": "stage", "label": "Status", "type": "SINGLE_SELECT", "required": true, "filterable": true, "sortable": true, "defaultValue": "applied", "config": {"options": [
           {"value": "applied", "label": "Applied"}, {"value": "shortlisted", "label": "Shortlisted"},
           {"value": "assessment", "label": "Assessment"}, {"value": "interview", "label": "Interview"},
           {"value": "offered", "label": "Offered"}, {"value": "joined", "label": "Joined"},
@@ -228,7 +228,7 @@
       ],
       "layout": {"sections": [
         {"key": "application", "label": "Application", "columns": 2, "fields": ["student", "drive", "company", "department"]},
-        {"key": "progress", "label": "Progress", "columns": 2, "fields": ["status", "current_round", "remarks"]}
+        {"key": "progress", "label": "Progress", "columns": 2, "fields": ["stage", "current_round", "remarks"]}
       ]}
     },
     {
@@ -275,13 +275,13 @@
         {"apiKey": "joining_date", "label": "Joining date", "type": "DATE", "sortable": true},
         {"apiKey": "respond_by", "label": "Respond by", "type": "DATE", "sortable": true, "filterable": true},
         {"apiKey": "offer_letter", "label": "Offer letter", "type": "FILE_REFERENCE"},
-        {"apiKey": "status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "extended", "config": {"options": [
+        {"apiKey": "offer_status", "label": "Status", "type": "SINGLE_SELECT", "filterable": true, "sortable": true, "defaultValue": "extended", "config": {"options": [
           {"value": "extended", "label": "Extended"}, {"value": "accepted", "label": "Accepted"},
           {"value": "declined", "label": "Declined"}, {"value": "revoked", "label": "Revoked"}]}}
       ],
       "layout": {"sections": [
         {"key": "offer", "label": "Offer", "columns": 2, "fields": ["student", "company", "drive", "application", "department", "offer_type"]},
-        {"key": "terms", "label": "Terms", "columns": 2, "fields": ["ctc", "joining_date", "respond_by", "status", "offer_letter"]}
+        {"key": "terms", "label": "Terms", "columns": 2, "fields": ["ctc", "joining_date", "respond_by", "offer_status", "offer_letter"]}
       ]}
     }
   ],
@@ -338,7 +338,7 @@
                                        "placement_status", "profile_verified"]},
         "company": {"read": "ALL", "hiddenFields": ["notes", "pipeline_stage", "next_follow_up"]},
         "job": {"read": "ALL"},
-        "drive": {"read": {"scope": "ALL", "where": {"status": ["published", "registration_closed", "in_progress", "completed"]}}},
+        "drive": {"read": {"scope": "ALL", "where": {"drive_status": ["published", "registration_closed", "in_progress", "completed"]}}},
         "application": {"read": "OWN", "hiddenFields": ["remarks"]},
         "interview": {"read": {"scope": "ATTRIBUTE", "field": "student", "attribute": "student"}, "hiddenFields": ["feedback"]},
         "offer": {"read": {"scope": "ATTRIBUTE", "field": "student", "attribute": "student"}}
@@ -370,7 +370,7 @@
   "workflows": [
     {
       "module": "application",
-      "field": "status",
+      "field": "stage",
       "definition": {
         "initial": "applied",
         "states": [
