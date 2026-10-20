@@ -48,6 +48,9 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Redis only accelerates (rate limits, caches, notification fan-out); callers fall back when it is slow.
+      timeout: ${REDIS_TIMEOUT:250ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
 
   modulith:
     detection-strategy: explicitly-annotated
@@ -75,6 +78,16 @@ bm4a:
   ratelimit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     writes-per-minute: ${RATE_LIMIT_WRITES_PER_MINUTE:300}
+
+campushire:
+  # Calendar dates (offer deadlines, follow-ups due today) are compared in the institute's zone.
+  time-zone: ${CAMPUSHIRE_TIME_ZONE:Asia/Kolkata}
+  dashboard:
+    cache-ttl: ${CAMPUSHIRE_DASHBOARD_CACHE_TTL:60s}
+  projections:
+    stats-refresh-interval: ${CAMPUSHIRE_STATS_REFRESH_INTERVAL:5m}
+  events:
+    resubmit-interval: ${CAMPUSHIRE_EVENTS_RESUBMIT_INTERVAL:60s}
 
 logging:
   pattern:

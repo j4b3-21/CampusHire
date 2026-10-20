@@ -9,6 +9,13 @@ bm4a:
   ratelimit:
     enabled: false
 
+campushire:
+  # No Redis in the test containers; tests refresh the statistics view explicitly.
+  dashboard:
+    cache-ttl: 0s
+  projections:
+    stats-refresh-interval: 1h
+
 logging:
   level:
     org.testcontainers: WARN
