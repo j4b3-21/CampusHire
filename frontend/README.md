@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CampusHire web app
 
-## Getting Started
+Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4, Radix primitives (shadcn-style components),
+TanStack Query/Table, react-hook-form + zod, keycloak-js.
 
-First, run the development server:
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # adjust if Keycloak/API run elsewhere
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Needs Keycloak on `:8180` (realm `campushire`, public client `campushire-web`) and the API on `:8080`. The browser only
+calls relative `/api/v1/...`; `next.config.ts` rewrites `/api/*` to `API_INTERNAL_URL`. `npm run build` produces a
+`standalone` server (`.next/standalone/server.js`) for the Docker image.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`npm run lint` and `npm run build` must stay at zero errors.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it fits together
 
-## Learn More
+| Area | Where |
+|------|-------|
+| Auth (PKCE S256, `check-sso`, refresh before expiry, logout) | `src/lib/auth/`, `src/store/auth-store.ts`, `src/components/auth/` |
+| Redirect hints (non-sensitive cookie only) | `src/proxy.ts` |
+| API client (bearer, problem details, ETag/If-Match, filters) | `src/lib/api/client.ts`, `errors.ts`, `record-query.ts` |
+| TanStack Query hooks | `src/lib/api/hooks/` (`useOrganizations`, `useMyAccess`, `useModules`, `useRecords`, `usePatchRecord`, …) |
+| API types | `src/types/` |
+| Org context, role-aware navigation | `src/components/app/org-context.tsx`, `src/lib/navigation.ts` |
+| Shell (sidebar, header, ⌘K palette) | `src/components/layout/` |
+| Metadata-driven records (`RecordTable`, `RecordForm`, `RecordDetail`) | `src/components/records/`, `src/lib/metadata/` |
+| Design system | `src/components/ui/`, tokens in `src/app/globals.css` |
 
-To learn more about Next.js, take a look at the following resources:
+## Routes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Path | Page |
+|------|------|
+| `/login` | Sign-in landing (Google, email, create account; all on Keycloak) |
+| `/register`, `/forgot-password` | Hand off to Keycloak registration / password reset |
+| `/app` | Picks the last used institute, or onboarding when the user has none |
+| `/app/onboarding` | Create an institute, or guidance for students/recruiters |
+| `/app/[orgId]` | Dashboard |
+| `/app/[orgId]/m/[moduleKey]` | Record list (URL-synced paging, sort, search, filters, trash) |
+| `/app/[orgId]/m/[moduleKey]/new` | Create form |
+| `/app/[orgId]/m/[moduleKey]/[recordId]` | Detail, related records, history |
+| `/app/[orgId]/m/[moduleKey]/[recordId]/edit` | Edit form (JSON Merge Patch with `If-Match`) |
+| `/app/[orgId]/admin/[section]` | Admin pages (placeholders) |
+| `/app/[orgId]/profile` | Profile |

@@ -1,122 +1,90 @@
 import { create } from "zustand";
 
-import { api } from "@/lib/api";
-import { clearAuthHintCookie, setAuthHintCookie } from "@/lib/session-cookie";
 import {
-  forgotPassword as keycloakForgotPassword,
-  initKeycloak,
+  getProfile,
+  initAuth,
   isAuthenticated,
   login as keycloakLogin,
-  loginWithGoogle as keycloakLoginWithGoogle,
   logout as keycloakLogout,
+  onSessionChange,
   register as keycloakRegister,
-  onSessionExpired,
-} from "@/lib/keycloak";
-import type {
-  ApiResponse,
-  AuthProvider,
-  AuthUser,
-  ForgotPasswordFormValues,
-  LoginFormValues,
-  RegisterFormValues,
-} from "@/types/auth";
+  type AuthProfile,
+  type LoginOptions,
+} from "@/lib/auth/keycloak";
+import { clearAuthHintCookie, setAuthHintCookie } from "@/lib/auth/session-cookie";
 
-export interface AuthStore {
-  user: AuthUser | null;
-  roles: string[];
-  authenticated: boolean;
-  loading: boolean;
-  initializeAuth: () => Promise<void>;
-  fetchCurrentUser: () => Promise<AuthUser | null>;
-  login: (values: LoginFormValues, provider?: AuthProvider) => Promise<void>;
-  register: (values: RegisterFormValues) => Promise<void>;
-  forgotPassword: (values: ForgotPasswordFormValues) => Promise<void>;
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+export interface AuthState {
+  status: AuthStatus;
+  profile: AuthProfile | null;
+  /** Set when Keycloak could not be reached during initialization. */
+  error: string | null;
+  initialize: () => Promise<void>;
+  login: (options?: LoginOptions) => Promise<void>;
+  register: (options?: { next?: string | null }) => Promise<void>;
   logout: () => Promise<void>;
-  setUser: (user: AuthUser | null) => void;
 }
 
-async function loadCurrentUser() {
-  const response = await api.get<ApiResponse<AuthUser>>("/auth/me");
-  return response.data.data;
-}
+let unsubscribe: (() => void) | null = null;
 
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  roles: [],
-  authenticated: false,
-  loading: true,
+export const useAuthStore = create<AuthState>((set, get) => ({
+  status: "loading",
+  profile: null,
+  error: null,
 
-  initializeAuth: async () => {
-    set({ loading: true });
-    try {
-      try {
-        await initKeycloak();
-      } catch {
-        set({ authenticated: false });
-      }
-      const authed = isAuthenticated();
-      set({ authenticated: authed });
-      if (authed) {
-        setAuthHintCookie();
-        onSessionExpired(() => {
+  initialize: async () => {
+    if (!unsubscribe) {
+      unsubscribe = onSessionChange((authenticated) => {
+        if (authenticated) {
+          setAuthHintCookie();
+          set({ status: "authenticated", profile: getProfile() });
+        } else {
           clearAuthHintCookie();
-          set({ user: null, roles: [], authenticated: false });
-        });
+          set({ status: "unauthenticated", profile: null });
+        }
+      });
+    }
+    if (get().status !== "loading") return;
+    try {
+      const authenticated = await initAuth();
+      if (authenticated && isAuthenticated()) {
+        setAuthHintCookie();
+        set({ status: "authenticated", profile: getProfile(), error: null });
       } else {
         clearAuthHintCookie();
-        set({ user: null, roles: [], authenticated: false });
+        set({ status: "unauthenticated", profile: null, error: null });
       }
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  fetchCurrentUser: async () => {
-    try {
-      const user = await loadCurrentUser();
-      set({
-        user,
-        roles: user.roles ?? [],
-        authenticated: true,
-      });
-      setAuthHintCookie();
-      return user;
     } catch {
       clearAuthHintCookie();
-      set({ user: null, roles: [], authenticated: false });
-      return null;
+      set({
+        status: "unauthenticated",
+        profile: null,
+        error: "The sign-in service is not reachable right now.",
+      });
     }
   },
 
-  login: async (values, provider = "password") => {
-    if (provider === "google") {
-      await keycloakLoginWithGoogle({ email: values.email });
-      return;
+  login: async (options) => {
+    try {
+      await keycloakLogin(options);
+    } catch {
+      set({ error: "The sign-in service is not reachable right now." });
+      throw new Error("login_unavailable");
     }
-
-    await keycloakLogin({ email: values.email });
   },
 
-  register: async (values) => {
-    sessionStorage.setItem("campushire.register", JSON.stringify(values));
-    await keycloakRegister({ redirectUri: `${window.location.origin}/dashboard` });
-  },
-
-  forgotPassword: async (values) => {
-    await keycloakForgotPassword({ email: values.email });
+  register: async (options) => {
+    try {
+      await keycloakRegister(options);
+    } catch {
+      set({ error: "The sign-in service is not reachable right now." });
+      throw new Error("register_unavailable");
+    }
   },
 
   logout: async () => {
     clearAuthHintCookie();
-    set({ user: null, roles: [], authenticated: false });
-    await keycloakLogout({ redirectUri: `${window.location.origin}/login` });
-  },
-
-  setUser: (user) => {
-    set({
-      user,
-      roles: user?.roles ?? [],
-      authenticated: Boolean(user),
-    });
+    await keycloakLogout();
   },
 }));

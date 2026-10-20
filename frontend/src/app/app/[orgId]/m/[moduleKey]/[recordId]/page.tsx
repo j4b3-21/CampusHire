@@ -1,0 +1,10 @@
+import { ModuleDetailPage } from "@/components/records/module-pages";
+
+export default async function RecordRoute({
+  params,
+}: {
+  params: Promise<{ orgId: string; moduleKey: string; recordId: string }>;
+}) {
+  const { moduleKey, recordId } = await params;
+  return <ModuleDetailPage moduleKey={moduleKey} recordId={recordId} />;
+}
