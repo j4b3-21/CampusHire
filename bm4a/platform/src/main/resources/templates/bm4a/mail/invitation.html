@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout.html :: layout(~{::content})}">
+<body>
+<th:block th:fragment="content">
+  <h1 style="margin:0 0 16px 0;font-size:20px;line-height:28px;font-weight:600;color:#18181b;">
+    Join <span th:text="${organizationName}">Organization</span> on <span th:text="${appName}">BM4A</span>
+  </h1>
+  <p style="margin:0 0 16px 0;" th:if="${inviterName != null}">
+    <strong style="color:#18181b;" th:text="${inviterName}">Someone</strong> invited you to join
+    <strong style="color:#18181b;" th:text="${organizationName}">Organization</strong> as
+    <strong style="color:#18181b;" th:text="${roleLabel}">Member</strong>.
+  </p>
+  <p style="margin:0 0 16px 0;" th:if="${inviterName == null}">
+    You have been invited to join <strong style="color:#18181b;" th:text="${organizationName}">Organization</strong>
+    as <strong style="color:#18181b;" th:text="${roleLabel}">Member</strong>.
+  </p>
+  <p style="margin:0 0 16px 0;">
+    Sign in with this e-mail address to accept. The invitation can be used once and expires on
+    <span th:text="${expiresAt}">date</span>.
+  </p>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px 0;border-collapse:separate;">
+    <tr>
+      <td style="border-radius:8px;background-color:#18181b;">
+        <a th:href="${acceptUrl}" href="#"
+           style="display:inline-block;padding:12px 22px;font-size:15px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">Accept invitation</a>
+      </td>
+    </tr>
+  </table>
+  <p style="margin:16px 0 0 0;font-size:12px;line-height:18px;color:#71717a;word-break:break-all;">
+    If the button does not work, open this link: <a th:href="${acceptUrl}" href="#" style="color:#52525b;" th:text="${acceptUrl}">link</a>
+  </p>
+  <p style="margin:16px 0 0 0;font-size:12px;line-height:18px;color:#71717a;">
+    If you did not expect this invitation, you can ignore this e-mail. Do not forward it: the link is personal.
+  </p>
+</th:block>
+</body>
+</html>

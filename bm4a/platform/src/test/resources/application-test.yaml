@@ -8,6 +8,13 @@ bm4a:
       audience: bm4a-api
   ratelimit:
     enabled: false
+  # The shared context has no Redis and no SMTP server; tests that need them enable these in their own context.
+  notifications:
+    email:
+      smtp:
+        host: ""
+    stream:
+      redis-enabled: false
 
 logging:
   level:

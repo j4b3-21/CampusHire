@@ -100,6 +100,7 @@ curl -s "${H[@]}" -X POST -H 'If-Match: "4"' $API/orgs/$ORG/modules/asset/record
 | | `POST .../{key}/links` `{sourceRecordId, targetRecordId}`, `DELETE .../{key}/links/{linkId}` | UPDATE on the source record, READ on the target record |
 | | `GET /orgs/{orgId}/modules/{moduleKey}/records/{id}/related/{key}[?direction=incoming]` | READ on both modules; the related side is scoped and field-filtered |
 | Audit | `GET /orgs/{orgId}/audit-events[?action=&resourceType=&resourceId=&actorUserId=]` | AUDIT_VIEW (admin) |
+| Notifications | `GET /notifications[?unread=true]`, `GET /notifications/unread-count`, `POST /notifications/{id}/read`, `POST /notifications/read-all`, `GET /notifications/stream` (SSE) | authenticated (own notifications only) |
 | Platform | `POST /platform/orgs/{orgId}/suspend\|reactivate`, `/platform/modules/**` (global modules) | realm role `bm4a-platform-admin` |
 
 ## Record filters
@@ -186,8 +187,59 @@ Tokens are 32 random bytes (base64url), stored only as SHA-256 hashes, valid for
 requires the token's `email_verified` claim and the same e-mail (case-insensitive): otherwise `403
 email_not_verified` / `invitation_email_mismatch`; reused `409 invitation_used`; expired or revoked
 `410 invitation_expired` / `invitation_revoked`. The accept link base is `bm4a.app.base-url` (`APP_BASE_URL`, default
-`http://localhost:3000`). Mail is sent after commit by the application's `InvitationMailer` bean; without one the
-platform only logs that an invitation was created (never the link).
+`http://localhost:3000`). After commit the invitation e-mail (template `invitation`) is queued in the e-mail outbox
+and sent by the notifications worker ([EMAIL.md](../operations/EMAIL.md)); the link is never logged.
+
+## Notifications
+
+Design: [ADR-007](../architecture/ADR-007-workflow-notifications-and-caching.md). Every endpoint returns only the
+caller's own notifications, across all organizations; another user's notification is `404`.
+
+```bash
+curl -s "${H[@]}" "$API/notifications?unread=true&page=0&size=20"   # newest first; unread optional
+# -> {items: [{id, organizationId, type, title, body, link, data, read, readAt, createdAt}], page, size,
+#     totalElements, totalPages}
+curl -s "${H[@]}" $API/notifications/unread-count                     # -> {"count": 3}
+curl -s "${H[@]}" -X POST $API/notifications/$ID/read                 # -> the notification (idempotent)
+curl -s "${H[@]}" -X POST $API/notifications/read-all                 # -> {"updated": 3}
+```
+
+`organizationId` is `null` for platform-level notifications. `link` is an absolute path in the web application
+(`/app/<orgId>/...`) or an `http(s)` URL; `title` and `body` are plain text (render as text, never as HTML); `data` is
+an object of extra values set by the sender.
+
+Real time: `GET /notifications/stream` is a Server-Sent Events stream (`text/event-stream`) authenticated with the
+normal `Authorization: Bearer` header, so browsers need a fetch-based SSE client (`EventSource` cannot send headers).
+Reconnect when the stream ends (it is closed after 30 minutes, on deploys, or when the client falls behind) and
+re-fetch the list after reconnecting. At most 5 streams per user per API replica; opening a sixth closes the oldest.
+
+```text
+retry:5000
+:connected
+
+event:unread-count
+data:{"count":2}
+
+event:notification
+id:6f1c...-uuid
+data:{"id":"6f1c...","organizationId":"...","type":"drive.published","title":"New drive","body":"...","link":"/app/...","data":{},"read":false,"readAt":null,"createdAt":"2026-10-20T10:00:00Z"}
+
+event:unread-count
+data:{"count":3}
+
+:keep-alive
+```
+
+- `unread-count` comes first on every connection and after every change (new notification, read, read all - also
+  from other tabs and devices).
+- `notification` carries the same JSON as a list item; the SSE `id` is the notification ID.
+- Comment lines (`:keep-alive` every 25 s) only keep proxies from closing idle connections. The response sets
+  `X-Accel-Buffering: no`; other proxies must not buffer `/api/v1/notifications/stream`.
+
+Backend modules send notifications with `Notifier.notify(organizationId, userIds, NotificationMessage, channels)`
+(`IN_APP`, `EMAIL`) and arbitrary e-mail with `Notifier.sendEmail(organizationId, to, EmailMessage)`; rows are written
+in the caller's transaction and delivered after commit (real-time push across replicas via Redis pub/sub, e-mail via
+the outbox worker).
 
 ## Upgrading databases created before ADR-004
 

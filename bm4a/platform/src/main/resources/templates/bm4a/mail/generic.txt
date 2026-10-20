@@ -1,0 +1,8 @@
+[(${title})]
+
+[# th:each="paragraph : ${paragraphs}"][(${paragraph})]
+
+[/][# th:if="${actionUrl != null}"][(${actionLabel})]: [(${actionUrl})]
+
+[/]--
+This message was sent by [(${appName})] ([(${baseUrl})]). It was generated automatically; replies are not monitored.
