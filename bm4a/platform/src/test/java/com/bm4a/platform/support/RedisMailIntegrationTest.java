@@ -12,14 +12,16 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * Like {@link IntegrationTest}, plus Redis (notification fan-out) and a Mailpit SMTP server, on a real HTTP port with
- * virtual threads. All tests using this annotation share one context.
+ * Like {@link IntegrationTest}, plus Redis (schema cache, notification fan-out) and a Mailpit SMTP server, on a real
+ * HTTP port with virtual threads. All tests using this annotation share one context.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = {
         "spring.threads.virtual.enabled=true",
         "bm4a.app.name=CampusHire",
+        "bm4a.metadata.cache.enabled=true",
+        "bm4a.metadata.cache.circuit-open=1s",
         "bm4a.notifications.stream.redis-enabled=true",
         "bm4a.notifications.email.poll-interval=200ms",
         "bm4a.notifications.email.from=Platform Tests <noreply@bm4a.test>",

@@ -48,6 +48,9 @@ bm4a:
   metadata:
     # One-off upgrade aid: write OpenFGA module tuples for modules created before migration V8 (idempotent).
     sync-module-tuples-on-startup: ${BM4A_SYNC_MODULE_TUPLES:false}
+    cache:
+      # Module schemas in Redis (ADR-007); PostgreSQL stays the source of truth.
+      enabled: ${METADATA_CACHE_ENABLED:true}
   notifications:
     email:
       # Without SMTP_HOST nothing is sent and queued e-mails stay pending (see docs/operations/EMAIL.md).

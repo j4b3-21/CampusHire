@@ -9,6 +9,9 @@ bm4a:
   ratelimit:
     enabled: false
   # The shared context has no Redis and no SMTP server; tests that need them enable these in their own context.
+  metadata:
+    cache:
+      enabled: false
   notifications:
     email:
       smtp:

@@ -40,7 +40,8 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Module, field and layout definitions. Every change locks the module row, increments its definition version and
- * stores an immutable snapshot, all in one transaction together with the audit event.
+ * stores an immutable snapshot, all in one transaction together with the audit event; the cached schemas of the
+ * module's scope are evicted after commit.
  */
 @Service
 public class MetadataService {
@@ -54,17 +55,19 @@ public class MetadataService {
     private final LayoutValidator layoutValidator;
     private final AuditLog audit;
     private final ApplicationEventPublisher events;
+    private final SchemaCache schemaCache;
     private final JsonColumns json;
     private final Clock clock;
 
     MetadataService(MetadataRepository repository, FieldDefinitionValidator fieldValidator,
-            LayoutValidator layoutValidator, AuditLog audit, ApplicationEventPublisher events, JsonColumns json,
-            Clock clock) {
+            LayoutValidator layoutValidator, AuditLog audit, ApplicationEventPublisher events, SchemaCache schemaCache,
+            JsonColumns json, Clock clock) {
         this.repository = repository;
         this.fieldValidator = fieldValidator;
         this.layoutValidator = layoutValidator;
         this.audit = audit;
         this.events = events;
+        this.schemaCache = schemaCache;
         this.json = json;
         this.clock = clock;
     }
@@ -96,6 +99,7 @@ public class MetadataService {
                 emptyLayout(), 1, now, actor, now, actor);
         try {
             repository.insertModule(module);
+            schemaCache.evictAfterCommit(module.organizationId());
         } catch (DuplicateKeyException ex) {
             throw ApiException.conflict("module_exists", "A module with apiKey '" + in.apiKey() + "' already exists");
         }
@@ -349,6 +353,7 @@ public class MetadataService {
                 module.settings(), module.layout(), module.version() + 1, module.createdAt(), module.createdBy(), now,
                 actor);
         repository.updateModule(bumped);
+        schemaCache.evictAfterCommit(bumped.organizationId());
         snapshot(bumped, actor, now);
         return bumped;
     }
