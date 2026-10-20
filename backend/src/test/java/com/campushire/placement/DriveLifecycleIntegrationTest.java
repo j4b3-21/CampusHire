@@ -78,6 +78,16 @@ class DriveLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.breakdown.byDepartment[*].departmentId", containsInAnyOrder(ece)));
         institute.recruiter(company).caller().get(DRIVE + "/eligibility/preview", institute.org, drive)
                 .andExpect(status().isForbidden());
+
+        institute.owner.post(DRIVE + "/eligibility/preview", "{\"eligibility\": {}}", institute.org, drive)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligibleCount").value(3))
+                .andExpect(jsonPath("$.reasons.not_participating").value(1))
+                .andExpect(jsonPath("$.totalConsidered").value(4));
+        institute.owner.post(DRIVE + "/eligibility/preview", "{\"eligibility\": {\"minCgpa\": 11}}", institute.org,
+                drive).andExpect(status().isBadRequest());
+        institute.owner.get(DRIVE + "/eligibility/preview", institute.org, drive)
+                .andExpect(jsonPath("$.eligibleCount").value(1));
     }
 
     @Test

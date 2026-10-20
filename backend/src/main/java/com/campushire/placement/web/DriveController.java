@@ -40,6 +40,9 @@ import com.campushire.placement.internal.EligibilityService.Preview;
 import com.campushire.placement.internal.PipelineService;
 import com.campushire.placement.internal.PipelineService.BulkResult;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.NullNode;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -68,6 +71,17 @@ class DriveController {
     Preview preview(CurrentUser user, @PathVariable UUID orgId, @PathVariable UUID driveId,
             @RequestParam(required = false) Integer sample) {
         return eligibility.preview(user, orgId, driveId, sample);
+    }
+
+    /** Evaluates unsaved rules ({@code {"eligibility": {...}}}) so editors can preview before saving. */
+    @PostMapping(DRIVE + "/eligibility/preview")
+    Preview previewDraft(CurrentUser user, @PathVariable UUID orgId, @PathVariable UUID driveId,
+            @RequestParam(required = false) Integer sample, @RequestBody DraftRules request) {
+        return eligibility.preview(user, orgId, driveId, sample,
+                request.eligibility() == null ? NullNode.getInstance() : request.eligibility());
+    }
+
+    record DraftRules(JsonNode eligibility) {
     }
 
     @PostMapping(DRIVE + "/publish")

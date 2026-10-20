@@ -93,6 +93,16 @@ class CampusHireSetupIntegrationTest {
     }
 
     @Test
+    void emptyDomainListCountsAsNotConfigured() throws Exception {
+        owner.post(SETUP, "", org).andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowedEmailDomains", hasSize(0)));
+
+        owner.post(SETUP, "{\"allowedEmailDomains\": [\"iiitt.ac.in\"]}", org)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowedEmailDomains", containsInAnyOrder("iiitt.ac.in")));
+    }
+
+    @Test
     void onlyAdminsCanSetUp() throws Exception {
         Caller member = api.newUser();
         Fixtures.addMember(owner, org, member, "MEMBER");

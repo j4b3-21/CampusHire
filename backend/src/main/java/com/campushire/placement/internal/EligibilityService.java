@@ -27,6 +27,8 @@ import com.campushire.common.CampusModules;
 import com.campushire.common.RecordValues;
 import com.campushire.placement.internal.PlacementRepository.OfferAggregate;
 
+import tools.jackson.databind.JsonNode;
+
 /**
  * Eligibility of students for drives: single verdicts through {@link EligibilityEvaluator}, whole-institute previews
  * through {@link EligibilityQuery}.
@@ -78,11 +80,20 @@ public class EligibilityService {
      * Invalid eligibility rules are 400 {@code validation_failed}.
      */
     public Preview preview(CurrentUser user, UUID organizationId, UUID driveId, Integer sampleSize) {
+        return preview(user, organizationId, driveId, sampleSize, null);
+    }
+
+    /**
+     * Like {@link #preview(CurrentUser, UUID, UUID, Integer)} but evaluates {@code draftRules} (unsaved eligibility
+     * JSON) instead of the drive's stored rules when given.
+     */
+    public Preview preview(CurrentUser user, UUID organizationId, UUID driveId, Integer sampleSize,
+            JsonNode draftRules) {
         CampusMember member = members.require(user, organizationId).requireStaff();
         ModuleGrant grant = access.require(member.context(), CampusModules.DRIVE, RecordAction.READ);
         RecordView drive = reader.findActive(grant, driveId).orElseThrow(() -> ApiException.notFound("Drive"));
         int limit = sampleSize == null ? DEFAULT_SAMPLE : Math.max(0, Math.min(MAX_SAMPLE, sampleSize));
-        EligibilityCriteria criteria = criteria(drive);
+        EligibilityCriteria criteria = draftRules == null ? criteria(drive) : EligibilityCriteria.parse(draftRules);
         BigDecimal ctc = jobCtc(organizationId, drive);
         EligibilityQuery query = EligibilityQuery.of(organizationId, criteria, settings.policy(organizationId), ctc,
                 member.coordinator() ? member.departmentIds() : null, null);

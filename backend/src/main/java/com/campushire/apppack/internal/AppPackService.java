@@ -35,8 +35,8 @@ import com.campushire.apppack.CampusHirePack;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.JsonNodeFactory;
-import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Setup of an organization: pack install, allowed e-mail domains and the installing admin's {@code tpo} org role, in
@@ -133,10 +133,11 @@ public class AppPackService implements CampusHirePack {
 
     private void storeDomains(TenantContext tenant, List<String> domains) {
         JsonNode existing = settings.get(tenant.organizationId()).path("campushire").path("allowedEmailDomains");
-        if (existing.isMissingNode() || existing.isNull()) {
-            ObjectNode defaults = JsonNodeFactory.instance.objectNode();
-            domains.forEach(defaults.putObject("campushire").putArray("allowedEmailDomains")::add);
-            settings.mergeDefaults(tenant.organizationId(), tenant.userId(), defaults);
+        if (existing.isMissingNode() || existing.isNull() || (existing.isArray() && existing.isEmpty())) {
+            ArrayNode values = JsonNodeFactory.instance.arrayNode();
+            domains.forEach(values::add);
+            settings.put(tenant.organizationId(), tenant.userId(), List.of("campushire", "allowedEmailDomains"),
+                    values);
             return;
         }
         Set<String> configured = new LinkedHashSet<>();

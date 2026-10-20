@@ -30,7 +30,7 @@ Personas (the caller's org role, see `GET /campushire/me`):
 | `GET /campushire/onboarding`, `POST /campushire/onboarding/claim` | any signed-in user |
 | `GET /orgs/{orgId}/campushire/me` | member |
 | `GET /orgs/{orgId}/campushire/dashboard` | member |
-| `GET .../campushire/drives/{driveId}/eligibility/preview` | staff |
+| `GET .../campushire/drives/{driveId}/eligibility/preview`, `POST` (unsaved rules) | staff |
 | `POST .../campushire/drives/{driveId}/publish\|close\|start\|complete\|cancel` | drive UPDATE (placement officers) |
 | `GET .../campushire/student/drives` | student |
 | `POST .../campushire/drives/{driveId}/apply`, `/withdraw` | student |
@@ -195,6 +195,9 @@ student (projections, typically a second behind the records). `sample` 0-50 (def
 
 `reasons` counts students failing each rule (a student may fail several). Errors: `400 validation_failed` (malformed
 eligibility, `errors[].field` like `eligibility.minCgpa`), `403` (students, recruiters), `404`.
+
+`POST .../campushire/drives/{driveId}/eligibility/preview?sample=10` with `{"eligibility": {...}}` returns the same
+response for rules that are not saved yet (the drive record is unchanged), so editors can preview while typing.
 
 Eligibility JSON (drive field `eligibility`): `{"minCgpa": 7.0, "maxActiveBacklogs": 0, "departments": [ids],
 "batches": [ids], "programs": ["btech"], "minTenth": 60, "minTwelfth": 60, "excludePlaced": true}`; absent rules do
