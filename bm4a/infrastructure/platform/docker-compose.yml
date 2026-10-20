@@ -1,0 +1,59 @@
+services:
+  platform:
+    profiles: ["app"]
+    build:
+      context: ../../platform
+      dockerfile: Dockerfile
+    image: bm4a-platform:local
+    container_name: bm4a-platform
+    restart: unless-stopped
+
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+
+      PLATFORM_DB_HOST: postgres
+      PLATFORM_DB_PORT: "5432"
+      PLATFORM_DB: ${PLATFORM_DB}
+      PLATFORM_DB_USER: ${PLATFORM_DB_USER}
+      PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD}
+
+      # Issuer must match the token `iss` (KC_HOSTNAME); keys are fetched in-network.
+      KEYCLOAK_ISSUER_URI: http://localhost:2346/realms/bm4a
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/bm4a/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: bm4a-api
+
+      OPENFGA_API_URL: http://openfga:8080
+      OPENFGA_PRESHARED_KEY: ${OPENFGA_PRESHARED_KEY}
+      OPENFGA_STORE_NAME: bm4a
+
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+
+    # Development-only host port.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    # The JRE image has no curl/wget; use bash /dev/tcp.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /actuator/health/readiness HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      openfga:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

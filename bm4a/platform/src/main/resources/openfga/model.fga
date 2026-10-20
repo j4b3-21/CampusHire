@@ -1,0 +1,21 @@
+model
+  schema 1.1
+
+# Keep in sync with model.json (the JSON form is what the platform writes to OpenFGA).
+
+type user
+
+type organization
+  relations
+    define owner: [user]
+    define admin: [user] or owner
+    define member: [user] or admin
+
+    define can_view: member
+    define can_update: admin
+    define can_archive: owner
+    define can_manage_members: admin
+    define can_manage_metadata: admin
+    define can_read_records: member
+    define can_write_records: member
+    define can_view_audit: admin

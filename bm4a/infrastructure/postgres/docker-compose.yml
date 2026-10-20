@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: bm4a-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Consumed by init/01-init.sh (first volume initialisation only).
+      KEYCLOAK_DB: ${KEYCLOAK_DB}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      OPENFGA_DB: ${OPENFGA_DB}
+      OPENFGA_DB_USER: ${OPENFGA_DB_USER}
+      OPENFGA_DB_PASSWORD: ${OPENFGA_DB_PASSWORD}
+      PLATFORM_DB: ${PLATFORM_DB}
+      PLATFORM_DB_USER: ${PLATFORM_DB_USER}
+      PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD}
+
+    # Development-only host port.
+    ports:
+      - "127.0.0.1:2345:5432"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./init:/docker-entrypoint-initdb.d:ro
+
+    # TCP (-h 127.0.0.1) so the check stays unhealthy while the entrypoint's
+    # socket-only temporary server is running the init scripts.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  postgres-data:

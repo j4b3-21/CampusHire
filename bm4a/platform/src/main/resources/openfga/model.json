@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "organization",
+      "relations": {
+        "owner": { "this": {} },
+        "admin": { "union": { "child": [ { "this": {} }, { "computedUserset": { "relation": "owner" } } ] } },
+        "member": { "union": { "child": [ { "this": {} }, { "computedUserset": { "relation": "admin" } } ] } },
+        "can_view": { "computedUserset": { "relation": "member" } },
+        "can_update": { "computedUserset": { "relation": "admin" } },
+        "can_archive": { "computedUserset": { "relation": "owner" } },
+        "can_manage_members": { "computedUserset": { "relation": "admin" } },
+        "can_manage_metadata": { "computedUserset": { "relation": "admin" } },
+        "can_read_records": { "computedUserset": { "relation": "member" } },
+        "can_write_records": { "computedUserset": { "relation": "member" } },
+        "can_view_audit": { "computedUserset": { "relation": "admin" } }
+      },
+      "metadata": {
+        "relations": {
+          "owner": { "directly_related_user_types": [ { "type": "user" } ] },
+          "admin": { "directly_related_user_types": [ { "type": "user" } ] },
+          "member": { "directly_related_user_types": [ { "type": "user" } ] },
+          "can_view": { "directly_related_user_types": [] },
+          "can_update": { "directly_related_user_types": [] },
+          "can_archive": { "directly_related_user_types": [] },
+          "can_manage_members": { "directly_related_user_types": [] },
+          "can_manage_metadata": { "directly_related_user_types": [] },
+          "can_read_records": { "directly_related_user_types": [] },
+          "can_write_records": { "directly_related_user_types": [] },
+          "can_view_audit": { "directly_related_user_types": [] }
+        }
+      }
+    }
+  ]
+}

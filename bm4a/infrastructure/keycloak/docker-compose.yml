@@ -1,0 +1,53 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    container_name: bm4a-keycloak
+    restart: unless-stopped
+
+    command:
+      - start-dev
+      - --import-realm
+
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KEYCLOAK_DB}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Full URL pins the token issuer to http://localhost:2346/realms/bm4a for
+      # every caller; backchannel-dynamic lets containers use keycloak:8080.
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: ${KC_HTTP_ENABLED}
+
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+    # Development-only host port.
+    ports:
+      - "127.0.0.1:2346:8080"
+
+    volumes:
+      - ./realms:/opt/keycloak/data/import:ro
+
+    # The image has no curl/wget; query the management port (9000) via bash.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    depends_on:
+      postgres:
+        condition: service_healthy

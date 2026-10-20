@@ -1,0 +1,89 @@
+# Base configuration shared by every profile.
+# Profile files: application-local.yaml (developer machine), application-prod.yaml (deployments).
+# Secrets are always supplied through environment variables; never put real values here.
+
+spring:
+  application:
+    name: bm4a-platform
+
+  datasource:
+    url: jdbc:postgresql://${PLATFORM_DB_HOST:localhost}:${PLATFORM_DB_PORT:5432}/${PLATFORM_DB:platform}
+    username: ${PLATFORM_DB_USER:platform}
+    password: ${PLATFORM_DB_PASSWORD:}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  modulith:
+    detection-strategy: explicitly-annotated
+
+bm4a:
+  security:
+    jwt:
+      issuer-uri: ${KEYCLOAK_ISSUER_URI:http://${KEYCLOAK_HOST:localhost}:${KEYCLOAK_PORT:2346}/realms/${KEYCLOAK_REALM:bm4a}}
+      jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${bm4a.security.jwt.issuer-uri}/protocol/openid-connect/certs}
+      audience: ${KEYCLOAK_AUDIENCE:bm4a-api}
+      platform-admin-role: bm4a-platform-admin
+  authz:
+    openfga:
+      api-url: ${OPENFGA_API_URL:http://localhost:2347}
+      api-token: ${OPENFGA_PRESHARED_KEY:}
+      store-name: ${OPENFGA_STORE_NAME:bm4a}
+      store-id: ${OPENFGA_STORE_ID:}
+      model-id: ${OPENFGA_MODEL_ID:}
+      bootstrap: false
+  ratelimit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    writes-per-minute: ${RATE_LIMIT_WRITES_PER_MINUTE:300}
+
+logging:
+  pattern:
+    correlation: "%replace([%X{correlationId}] ){'^\\[\\] $', ''}"
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - info
+          - metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include:
+            - readinessState
+            - db
+  health:
+    redis:
+      enabled: false

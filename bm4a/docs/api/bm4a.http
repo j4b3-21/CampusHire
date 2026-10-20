@@ -1,0 +1,108 @@
+### BM4A request collection (IntelliJ HTTP Client / VS Code REST Client).
+### Set @token from: scripts/dev-token.sh alice   - and @org from the "create organization" response.
+
+@api = http://localhost:8080/api/v1
+@token = paste-access-token-here
+@org = paste-organization-id-here
+@record = paste-record-id-here
+
+### Who am I
+GET {{api}}/me
+Authorization: Bearer {{token}}
+
+### Update profile
+PATCH {{api}}/me/profile
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"locale": "en-IN", "timeZone": "Asia/Kolkata", "preferences": {"theme": "dark"}}
+
+### Create organization
+POST {{api}}/orgs
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"name": "Acme"}
+
+### My organizations
+GET {{api}}/orgs
+Authorization: Bearer {{token}}
+
+### Add a member (userId from GET /me of that user)
+POST {{api}}/orgs/{{org}}/members
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"userId": "00000000-0000-0000-0000-000000000000", "role": "MEMBER"}
+
+### Define the ExampleAsset module (every field type)
+POST {{api}}/orgs/{{org}}/modules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+< ../examples/example-asset-module.json
+
+### Add a field later
+POST {{api}}/orgs/{{org}}/modules/example_asset/fields
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"apiKey": "location", "label": "Location", "type": "TEXT", "filterable": true}
+
+### Layout
+PUT {{api}}/orgs/{{org}}/modules/example_asset/layout
+Authorization: Bearer {{token}}
+If-Match: "2"
+Content-Type: application/json
+
+{"sections": [{"key": "general", "label": "General", "columns": 2, "fields": ["name", "serial", "quantity"]},
+              {"key": "commercial", "label": "Commercial", "tab": "Finance", "fields": ["price", "purchased_on"]}]}
+
+### Create a record
+POST {{api}}/orgs/{{org}}/modules/example_asset/records
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"data": {"name": "Laptop", "serial": "LAP-001", "price": {"amount": "85000", "currency": "INR"}, "tags": ["it"]}}
+
+### Read a record
+GET {{api}}/orgs/{{org}}/modules/example_asset/records/{{record}}
+Authorization: Bearer {{token}}
+
+### Partial update (JSON Merge Patch)
+PATCH {{api}}/orgs/{{org}}/modules/example_asset/records/{{record}}
+Authorization: Bearer {{token}}
+If-Match: "1"
+Content-Type: application/merge-patch+json
+
+{"data": {"quantity": 4, "notes": null}}
+
+### List with filter, sort, search and paging
+GET {{api}}/orgs/{{org}}/modules/example_asset/records?filter[quantity][gte]=2&sort=-price&q=lap&page=0&size=20
+Authorization: Bearer {{token}}
+
+### Soft delete
+DELETE {{api}}/orgs/{{org}}/modules/example_asset/records/{{record}}
+Authorization: Bearer {{token}}
+If-Match: "2"
+
+### Restore
+POST {{api}}/orgs/{{org}}/modules/example_asset/records/{{record}}/restore
+Authorization: Bearer {{token}}
+If-Match: "3"
+
+### History
+GET {{api}}/orgs/{{org}}/modules/example_asset/records/{{record}}/versions
+Authorization: Bearer {{token}}
+
+### Relationship between two modules
+POST {{api}}/orgs/{{org}}/relationships
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"apiKey": "asset_components", "label": "Components", "inverseLabel": "Part of",
+ "sourceModule": "example_asset", "targetModule": "example_asset", "cardinality": "ONE_TO_MANY", "onDelete": "DETACH"}
+
+### Audit trail
+GET {{api}}/orgs/{{org}}/audit-events?size=50
+Authorization: Bearer {{token}}

@@ -1,0 +1,18 @@
+# Local development profile: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# Reads platform/.env (copy platform/.env.example) when present. DEVELOPMENT ONLY.
+
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${PLATFORM_DB_HOST:localhost}:${PLATFORM_DB_PORT:2345}/${PLATFORM_DB:platform}
+
+bm4a:
+  authz:
+    openfga:
+      bootstrap: true
+
+management:
+  endpoint:
+    health:
+      show-details: always

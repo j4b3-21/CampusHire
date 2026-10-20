@@ -1,0 +1,14 @@
+# BM4A local development stack (DEVELOPMENT ONLY).
+#
+#   docker compose up -d                        # dependencies only
+#   docker compose --profile app up -d --build  # dependencies + platform
+#
+# All services share this project's default network and reach each other by
+# service name (postgres, keycloak, openfga, redis, platform).
+# Host ports are bound to 127.0.0.1 and exist for local development only.
+include:
+  - ./postgres/docker-compose.yml
+  - ./keycloak/docker-compose.yml
+  - ./openfga/docker-compose.yml
+  - ./redis/docker-compose.yml
+  - ./platform/docker-compose.yml

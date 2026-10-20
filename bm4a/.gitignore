@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Local environment files (copy the matching .env.example instead)
+.env
+.env.*
+!.env.example
+
+# Build output
+target/
+build/

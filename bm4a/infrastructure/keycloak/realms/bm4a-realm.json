@@ -1,0 +1,112 @@
+{
+  "realm": "bm4a",
+  "displayName": "BM4A (LOCAL DEVELOPMENT ONLY)",
+  "attributes": {
+    "bm4a.environment": "development-only",
+    "bm4a.notice": "Local development realm. Contains well-known dev passwords. Never import into a shared or production Keycloak."
+  },
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "bm4a-platform-admin",
+        "description": "Platform-wide administrator for global BM4A metadata."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "bm4a-api",
+      "name": "BM4A API",
+      "description": "Resource server / access-token audience. No login flows.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "bm4a-cli",
+      "name": "BM4A CLI (LOCAL DEVELOPMENT ONLY)",
+      "description": "Public client for local development, curl and smoke tests. Password grant enabled.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:8080", "http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:3000/*"
+      },
+      "defaultClientScopes": ["basic", "acr", "web-origins", "profile", "email", "roles"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "bm4a-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "bm4a-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@bm4a.local",
+      "firstName": "Alice",
+      "lastName": "Developer",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["default-roles-bm4a"],
+      "credentials": [{ "type": "password", "value": "alice-dev-password", "temporary": false }]
+    },
+    {
+      "username": "bob",
+      "email": "bob@bm4a.local",
+      "firstName": "Bob",
+      "lastName": "Developer",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["default-roles-bm4a"],
+      "credentials": [{ "type": "password", "value": "bob-dev-password", "temporary": false }]
+    },
+    {
+      "username": "platform-admin",
+      "email": "platform-admin@bm4a.local",
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "realmRoles": ["default-roles-bm4a", "bm4a-platform-admin"],
+      "credentials": [{ "type": "password", "value": "admin-dev-password", "temporary": false }]
+    }
+  ]
+}

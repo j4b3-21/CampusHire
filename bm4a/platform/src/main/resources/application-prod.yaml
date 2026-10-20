@@ -1,0 +1,25 @@
+# Production profile. Every connection setting must be provided explicitly; there are no localhost defaults.
+
+spring:
+  datasource:
+    url: ${PLATFORM_DB_URL}
+    username: ${PLATFORM_DB_USER}
+    password: ${PLATFORM_DB_PASSWORD}
+
+bm4a:
+  security:
+    jwt:
+      issuer-uri: ${KEYCLOAK_ISSUER_URI}
+      jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
+      audience: ${KEYCLOAK_AUDIENCE}
+
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}
+
+logging:
+  structured:
+    format:
+      console: ecs
