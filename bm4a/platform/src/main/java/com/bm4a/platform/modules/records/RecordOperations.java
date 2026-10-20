@@ -41,6 +41,14 @@ public interface RecordOperations {
     Optional<RecordView> findActiveByField(UUID organizationId, String moduleKey, String fieldKey, JsonNode value);
 
     /**
+     * The active record holding {@code value} in the {@code unique} field {@code fieldKey}, compared exactly as
+     * uniqueness is enforced (text, e-mail, phone and URL values case-insensitively). Unknown fields are 400, fields
+     * that are not unique 400 {@code field_not_unique}.
+     */
+    Optional<RecordView> findActiveByUniqueValue(UUID organizationId, String moduleKey, String fieldKey,
+            JsonNode value);
+
+    /**
      * Same query language as the record API ({@code filter[field][op]}, {@code sort}, {@code q}), restricted to
      * {@code scope} ({@link RecordScope#all()} for everything).
      */
