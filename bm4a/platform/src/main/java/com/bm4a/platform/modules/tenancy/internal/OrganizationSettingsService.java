@@ -69,6 +69,46 @@ class OrganizationSettingsService implements OrganizationSettings {
         return List.copyOf(added);
     }
 
+    @Override
+    @Transactional
+    public boolean put(UUID organizationId, UUID actorUserId, List<String> path, JsonNode value) {
+        if (path == null || path.isEmpty() || path.stream().anyMatch(key -> key == null || key.isBlank())) {
+            throw ApiException.validation("settings", "path", "path must contain at least one non-blank key");
+        }
+        OrganizationRow current = repository.lockOrganization(organizationId)
+                .orElseThrow(() -> ApiException.notFound("Organization"));
+        ObjectNode updated = current.settings().deepCopy();
+        ObjectNode parent = updated;
+        for (String key : path.subList(0, path.size() - 1)) {
+            JsonNode child = parent.get(key);
+            if (child == null || child.isNull()) {
+                parent = parent.putObject(key);
+            } else if (child instanceof ObjectNode object) {
+                parent = object;
+            } else {
+                throw ApiException.validation("settings." + String.join(".", path), "type",
+                        "'" + key + "' is not an object");
+            }
+        }
+        String leaf = path.getLast();
+        if (value == null || value.isNull()) {
+            parent.remove(leaf);
+        } else {
+            parent.set(leaf, value.deepCopy());
+        }
+        if (updated.equals(current.settings())) {
+            return false;
+        }
+        if (json.write(updated).length() > OrganizationService.MAX_SETTINGS_BYTES) {
+            throw ApiException.validation("settings", "size", "settings must not exceed 16 KiB");
+        }
+        repository.updateOrganization(current.id(), current.name(), current.status(), json.write(updated),
+                current.version() + 1, actorUserId, SqlValues.now(clock));
+        events.publishEvent(new TenancyEvent.OrganizationUpdated(current.id(), actorUserId,
+                Map.of("settings", Map.of("replaced", String.join(".", path)))));
+        return true;
+    }
+
     private static void merge(ObjectNode target, ObjectNode additions, String prefix, List<String> added) {
         for (Map.Entry<String, JsonNode> entry : additions.properties()) {
             JsonNode existing = target.get(entry.getKey());

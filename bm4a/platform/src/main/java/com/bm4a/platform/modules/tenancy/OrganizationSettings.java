@@ -23,4 +23,12 @@ public interface OrganizationSettings {
      * the settings size limit.
      */
     List<String> mergeDefaults(UUID organizationId, UUID actorUserId, JsonNode defaults);
+
+    /**
+     * Replaces the value at {@code path} (for example {@code ["campushire", "allowedEmailDomains"]}), creating missing
+     * parent objects; a {@code null} value removes the key. The organization row is locked. Returns whether the
+     * settings changed. 400 {@code validation_failed} for an empty path, a parent that is not an object, or when the
+     * result would exceed the settings size limit.
+     */
+    boolean put(UUID organizationId, UUID actorUserId, List<String> path, JsonNode value);
 }

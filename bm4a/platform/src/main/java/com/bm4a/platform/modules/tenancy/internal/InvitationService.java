@@ -30,6 +30,7 @@ import com.bm4a.platform.modules.shared.error.ApiException;
 import com.bm4a.platform.modules.shared.persistence.SqlValues;
 import com.bm4a.platform.modules.shared.web.PageQuery;
 import com.bm4a.platform.modules.shared.web.PageResponse;
+import com.bm4a.platform.modules.tenancy.InvitationAdministration;
 import com.bm4a.platform.modules.tenancy.InvitationMail;
 import com.bm4a.platform.modules.tenancy.InvitationMailer;
 import com.bm4a.platform.modules.tenancy.MembershipRole;
@@ -51,7 +52,7 @@ import tools.jackson.databind.node.ObjectNode;
  * owners requires an owner, like granting those roles directly.
  */
 @Service
-public class InvitationService {
+public class InvitationService implements InvitationAdministration {
 
     static final Duration VALIDITY = Duration.ofDays(7);
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]{1,64}@[^\\s@]+\\.[^\\s@]{2,}$");
@@ -131,6 +132,16 @@ public class InvitationService {
         sendAfterCommit(new InvitationMail(row.id(), organization.id(), organization.name(), inviter, normalizedEmail,
                 roleLabel(membershipRole, orgRole), acceptUrl, row.expiresAt()));
         return new CreatedInvitation(view(row, orgRole, now), acceptUrl);
+    }
+
+    @Override
+    @Transactional
+    public IssuedInvitation invite(TenantContext tenant, String email, MembershipRole membershipRole, String roleKey,
+            JsonNode attributes) {
+        CreatedInvitation created = create(tenant, email, membershipRole, roleKey, attributes);
+        InvitationView v = created.invitation();
+        return new IssuedInvitation(v.id(), v.email(), v.membershipRole(), v.roleKey(), v.attributes(), v.status(),
+                v.expiresAt(), v.createdAt(), v.createdBy(), created.acceptUrl());
     }
 
     @Transactional(readOnly = true)
