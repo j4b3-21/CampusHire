@@ -7,7 +7,7 @@ import { downloadBlob } from "@/lib/api/download";
 import { ApiError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/keys";
 import { useAuthStore } from "@/store/auth-store";
-import type { Page } from "@/types/api";
+import type { JsonValue, Page } from "@/types/api";
 import type {
   Applicant,
   ApplicantQuery,
@@ -103,16 +103,24 @@ export function useEligibilityPreview(
   driveId: string,
   /** Drive record version: a new version (saved rules) means a new preview. */
   version: number,
-  options: { enabled?: boolean; sample?: number } = {}
+  options: {
+    enabled?: boolean;
+    sample?: number;
+    /** Unsaved eligibility JSON to evaluate instead of the drive's saved rules. */
+    draft?: JsonValue | null;
+  } = {}
 ) {
   const authed = useAuthed();
+  const draft = options.draft ?? null;
+  const draftKey = draft === null ? null : JSON.stringify(draft);
+  const path = `${campus(orgId)}/drives/${driveId}/eligibility/preview`;
+  const query = { sample: options.sample ?? 10 };
   return useQuery({
-    queryKey: queryKeys.eligibilityPreview(orgId, driveId, version),
+    queryKey: queryKeys.eligibilityPreview(orgId, driveId, version, draftKey),
     queryFn: ({ signal }) =>
-      api.get<EligibilityPreview>(`${campus(orgId)}/drives/${driveId}/eligibility/preview`, {
-        query: { sample: options.sample ?? 10 },
-        signal,
-      }),
+      draft === null
+        ? api.get<EligibilityPreview>(path, { query, signal })
+        : api.post<EligibilityPreview>(path, { eligibility: draft }, { query, signal }),
     enabled: authed && options.enabled !== false,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
@@ -201,6 +209,33 @@ export function useWithdrawFromDrive(orgId: string) {
     onSuccess: async (application, { driveId }) => {
       cache.setApplication(driveId, application);
       await cache.refresh();
+    },
+  });
+}
+
+export interface CreateOfferInput {
+  applicationId: string;
+  /** Rupees per annum. */
+  ctc: number;
+  offerType: "full_time" | "internship" | "ppo";
+  joiningDate?: string;
+  respondBy?: string;
+  offerLetterFileId?: string;
+  override?: boolean;
+}
+
+export function useCreateOffer(orgId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateOfferInput) => api.post<OfferView>(`${campus(orgId)}/offers`, input),
+    meta: { silent: true },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.records(orgId, "offer") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.records(orgId, "application") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.records(orgId, "student") }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(orgId) }),
+      ]);
     },
   });
 }

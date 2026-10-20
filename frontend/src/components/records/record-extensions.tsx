@@ -6,6 +6,7 @@ import type { OrgContextValue } from "@/components/app/org-context";
 import { ApplicantsPanel } from "@/components/drives/applicants-panel";
 import { DriveLifecyclePanel } from "@/components/drives/drive-lifecycle";
 import { EligibilityEditor } from "@/components/drives/eligibility-editor";
+import { CreateOfferPanel } from "@/components/offers/create-offer";
 import type { VersionedRecord } from "@/lib/api";
 import type { ModuleDefinition } from "@/types/metadata";
 
@@ -29,7 +30,11 @@ export function recordExtensions(
   record: VersionedRecord,
   org: Pick<OrgContextValue, "isStaff" | "persona" | "capabilities">
 ): RecordExtensions {
-  if (module.apiKey !== "drive" || record.deletedAt) return NONE;
+  if (record.deletedAt) return NONE;
+  if (module.apiKey === "application") {
+    return org.isStaff ? { tabs: [], aside: <CreateOfferPanel record={record} /> } : NONE;
+  }
+  if (module.apiKey !== "drive") return NONE;
   const driveCaps = org.capabilities("drive");
   const canManage = org.isStaff && driveCaps.update;
   const tabs: ExtensionTab[] = [];

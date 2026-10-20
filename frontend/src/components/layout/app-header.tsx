@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRecord } from "@/lib/api";
-import { recordTitle } from "@/lib/metadata/fields";
+import { RecordTitle } from "@/components/records/field-value";
 import { ADMIN_NAV, adminPath, modulePath, orgPath, recordPath } from "@/lib/navigation";
 import { useUiStore } from "@/store/ui-store";
 
@@ -67,7 +67,11 @@ function useCrumbs(): Crumb[] {
     if (pathname.endsWith("/board")) crumbs.push({ label: "Board" });
     if (params.recordId) {
       crumbs.push({
-        label: record.data ? recordTitle(definition, record.data) : <Skeleton className="h-3.5 w-24" />,
+        label: record.data ? (
+          <RecordTitle orgId={orgId} module={definition} record={record.data} />
+        ) : (
+          <Skeleton className="h-3.5 w-24" />
+        ),
         href: recordPath(orgId, params.moduleKey, params.recordId),
       });
       if (pathname.endsWith("/edit")) crumbs.push({ label: "Edit" });

@@ -64,8 +64,8 @@ export const queryKeys = {
   campus: (orgId: string) => ["orgs", orgId, "campushire"] as const,
   campusMe: (orgId: string) => ["orgs", orgId, "campushire", "me"] as const,
   dashboard: (orgId: string) => ["orgs", orgId, "campushire", "dashboard"] as const,
-  eligibilityPreview: (orgId: string, driveId: string, version: number) =>
-    ["orgs", orgId, "campushire", "eligibility", driveId, version] as const,
+  eligibilityPreview: (orgId: string, driveId: string, version: number, draftKey: string | null = null) =>
+    ["orgs", orgId, "campushire", "eligibility", driveId, version, draftKey] as const,
   studentDrives: (orgId: string, filter: string, page: number) =>
     ["orgs", orgId, "campushire", "student-drives", filter, page] as const,
   applicants: (orgId: string, driveId: string) => ["orgs", orgId, "campushire", "applicants", driveId] as const,

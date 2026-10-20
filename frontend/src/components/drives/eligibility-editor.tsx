@@ -30,8 +30,11 @@ import {
 import { recordTitle, selectOptions } from "@/lib/metadata/fields";
 import { formatInteger } from "@/lib/metadata/format";
 import { cn } from "@/lib/utils";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import type { JsonValue } from "@/types/api";
 
 const AUTOSAVE_MS = 800;
+const PREVIEW_DEBOUNCE_MS = 400;
 
 function useRecordOptions(orgId: string, moduleKey: string): { options: MultiComboboxOption[]; names: Map<string, string> } {
   const { moduleByKey } = useOrg();
@@ -107,9 +110,20 @@ function SaveState({ state }: { state: "saved" | "dirty" | "saving" | "invalid" 
   );
 }
 
-function PreviewPanel({ driveId, record, stale }: { driveId: string; record: VersionedRecord; stale: boolean }) {
+function PreviewPanel({
+  driveId,
+  record,
+  draft,
+  stale,
+}: {
+  driveId: string;
+  record: VersionedRecord;
+  /** Unsaved rules to preview; `null` previews the saved rules. */
+  draft: JsonValue | null;
+  stale: boolean;
+}) {
   const { orgId } = useOrg();
-  const preview = useEligibilityPreview(orgId, driveId, record.version, { sample: 10 });
+  const preview = useEligibilityPreview(orgId, driveId, record.version, { sample: 10, draft });
   const departments = useRecordOptions(orgId, "department");
   const data = preview.data;
   const reasons = Object.entries(data?.reasons ?? {})
@@ -128,7 +142,7 @@ function PreviewPanel({ driveId, record, stale }: { driveId: string; record: Ver
         {data?.driveCtc ? <span className="ml-auto text-xs text-muted-foreground">Drive CTC {formatLpa(data.driveCtc)}</span> : null}
       </header>
       {stale ? (
-        <p className="rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">The preview shows the saved rules. Save to update it.</p>
+        <p className="rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">Fix the highlighted rules to update the preview.</p>
       ) : null}
       {preview.isLoading ? (
         <div className="flex flex-col gap-3">
@@ -138,7 +152,7 @@ function PreviewPanel({ driveId, record, stale }: { driveId: string; record: Ver
         </div>
       ) : invalid ? (
         <div role="alert" className="rounded-md border border-destructive/20 bg-destructive-soft px-3 py-2.5 text-[13px] text-destructive-soft-foreground">
-          <p className="font-medium">The saved rules are invalid</p>
+          <p className="font-medium">{draft === null ? "The saved rules are invalid" : "These rules are invalid"}</p>
           <ul className="mt-1 list-disc pl-5 text-xs">
             {(preview.error as ApiError).errors.map((violation) => (
               <li key={violation.field + violation.message}>
@@ -295,6 +309,16 @@ export function EligibilityEditor({ record, canEdit }: { record: VersionedRecord
     return () => clearTimeout(timer);
   }, [autosave, dirty, valid, conflict, serverErrors, save]);
 
+  const draftJson = React.useMemo(
+    () => (dirty && valid ? JSON.stringify(rulesToJson(rules) ?? {}) : null),
+    [dirty, valid, rules]
+  );
+  const previewDraftJson = useDebouncedValue(draftJson, PREVIEW_DEBOUNCE_MS);
+  const previewDraft = React.useMemo<JsonValue | null>(
+    () => (previewDraftJson === null ? null : (JSON.parse(previewDraftJson) as JsonValue)),
+    [previewDraftJson]
+  );
+
   const saveState = conflict ? "conflict" : !valid ? "invalid" : saving ? "saving" : dirty ? "dirty" : "saved";
   const disabled = !canEdit;
 
@@ -377,7 +401,7 @@ export function EligibilityEditor({ record, canEdit }: { record: VersionedRecord
         ) : null}
         {!canEdit ? <p className="text-xs text-muted-foreground">Only placement officers can change eligibility rules.</p> : null}
       </section>
-      <PreviewPanel driveId={record.id} record={record} stale={dirty && !autosave} />
+      <PreviewPanel driveId={record.id} record={record} draft={previewDraft} stale={dirty && !valid} />
     </div>
   );
 }
