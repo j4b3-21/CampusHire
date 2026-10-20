@@ -491,9 +491,18 @@ POST /api/v1/orgs/{orgId}/invitations
 ```
 
 `201`: `{id, email, membershipRole, roleKey, attributes, status: "PENDING", expiresAt, createdAt, createdBy,
-acceptUrl}`. The CampusHire presets `POST .../campushire/companies/{companyId}/recruiters/invite` and
-`POST .../campushire/departments/{departmentId}/coordinators/invite` (`{"email"}`, same response, validating that the
-company or department exists) need an invitation API for application code in the platform and are not available yet.
+acceptUrl}`.
+
+CampusHire presets (placement officers only; the company or department must exist, otherwise `404`):
+
+```
+POST /api/v1/orgs/{orgId}/campushire/companies/{companyId}/recruiters/invite      {"email": "hr@acme.com"}
+POST /api/v1/orgs/{orgId}/campushire/departments/{departmentId}/coordinators/invite {"email": "hod.cse@iiitt.ac.in"}
+```
+
+`201`: `{id, email, membershipRole: "MEMBER", roleKey: "recruiter" | "coordinator", attributes: {company | department},
+status: "PENDING", expiresAt, createdAt, createdBy, acceptUrl}`; `403 access_denied` for other callers,
+`409 invitation_pending` when that address already has a pending invitation.
 
 ## Notifications
 
