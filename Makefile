@@ -59,5 +59,8 @@ token: ## Print an access token: make token USER=student1@iiitt.ac.in [PASSWORD=
 	@user="$(if $(filter command line,$(origin USER)),$(USER),tpo@campushire.dev)"; \
 	scripts/dev-token.sh "$$user" $(PASSWORD)
 
+google-sso: ## Enable "Continue with Google" on the running Keycloak (GOOGLE_* in infrastructure/.env)
+	scripts/configure-google-sso.sh
+
 lint: ## Lint the frontend
 	cd frontend && npm run lint
