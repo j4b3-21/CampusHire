@@ -54,6 +54,9 @@ spring:
 
   modulith:
     detection-strategy: explicitly-annotated
+    events:
+      # Completed event publications are not needed after delivery; failed ones stay for resubmission.
+      completion-mode: delete
 
 bm4a:
   app:
