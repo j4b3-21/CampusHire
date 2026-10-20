@@ -18,6 +18,8 @@
 		<java.version>25</java.version>
 		<bm4a.version>0.0.1-SNAPSHOT</bm4a.version>
 		<spring-modulith.version>2.1.0</spring-modulith.version>
+		<poi.version>5.5.1</poi.version>
+		<openpdf.version>3.0.5</openpdf.version>
 	</properties>
 
 	<dependencies>
@@ -25,6 +27,16 @@
 			<groupId>com.bm4a</groupId>
 			<artifactId>platform</artifactId>
 			<version>${bm4a.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>${poi.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>${openpdf.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>io.micrometer</groupId>
